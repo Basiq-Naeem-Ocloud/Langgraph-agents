@@ -4,6 +4,9 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { chatBotNode } from "./nodes/chatBot";
 import { imageGenNode } from "./nodes/generateImage";
 import { BotType } from '../dto/create-ai.dto';
+import { documentChatNode } from "./nodes/docChat";
+import { HumanMessage } from "@langchain/core/messages";
+
 import { BaseMessage } from '@langchain/core/messages';
 
 import { config } from 'dotenv'
@@ -54,13 +57,21 @@ console.log('model', model);
 function shouldContinue(state: typeof MessagesAnnotation.State) {
     const messages = state.messages;
     const lastMessage = messages[messages.length - 1];
-    
+
     // Check if the message is a request for image generation
-    if (lastMessage && typeof lastMessage.content === 'string' && 
+    if (lastMessage && typeof lastMessage.content === 'string' &&
         lastMessage.content.toLowerCase().includes('generate image')) {
         return 'image';
     }
-    
+    // Check for document mention in any message
+    const hasDocumentReference = messages.some(message =>
+        typeof message.content === 'string' &&
+        message.content.includes('Document uploaded:'));
+
+    // If there's a document reference and the latest message is likely about the document
+    if (hasDocumentReference && lastMessage instanceof HumanMessage) {
+        return 'document';
+    }
     if (messages.length > 3) {
         return END;
     } else if (lastMessage.content === 'FINISHED') {
@@ -70,20 +81,29 @@ function shouldContinue(state: typeof MessagesAnnotation.State) {
     }
 }
 
-function createSimulation(botType?: BotType) {
+export function createGraph(botType?: BotType) {
     const workflow = new StateGraph(MessagesAnnotation)
-        .addNode('chatbot', chatBotNode)
-        .addNode('image', imageGenNode)
-        .addConditionalEdges('chatbot', shouldContinue, {
+        // .addNode('chatbot', chatBotNode)
+        // .addNode('image', imageGenNode)
+        .addNode('document', documentChatNode)
+        .addConditionalEdges('document', shouldContinue, {
             [END]: END,
-            continue: 'chatbot',
-            image: 'image'
+            document: 'document'
         })
-        .addEdge('image', 'chatbot')
-        .addEdge(START, 'chatbot')
+        // .addConditionalEdges('document', shouldContinue, {
+        //     [END]: END,
+        //     continue: 'chatbot',
+        //     image: 'image',
+        //     document: 'document'
+        // })
+        // .addEdge('image', 'chatbot')
+        // .addEdge('document', 'chatbot')
 
-    const simulation = workflow.compile()
-    return simulation;
+        // .addEdge(START, 'chatbot')
+        .addEdge(START, 'document')
+
+    const graph = workflow.compile()
+    return graph;
 }
 
-export { createSimulation };
+// export { createGraph };

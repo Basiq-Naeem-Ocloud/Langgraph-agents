@@ -14,23 +14,56 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const ai_service_1 = require("./ai.service");
 const create_ai_dto_1 = require("./dto/create-ai.dto");
+const multer_config_1 = require("../config/multer.config");
 let AiController = class AiController {
     aiService;
     constructor(aiService) {
         this.aiService = aiService;
     }
-    async process(createAiDto) {
-        return this.aiService.process(createAiDto);
+    async process(createAiDto, files) {
+        try {
+            const document = files.document?.[0];
+            const image = files.image?.[0];
+            if (document) {
+                console.log('Document details:', {
+                    filename: document.filename,
+                    originalname: document.originalname,
+                    mimetype: document.mimetype,
+                    size: document.size,
+                    path: document.path
+                });
+            }
+            if (image) {
+                console.log('Image details:', {
+                    filename: image.filename,
+                    originalname: image.originalname,
+                    mimetype: image.mimetype,
+                    size: image.size,
+                    path: image.path
+                });
+            }
+            return this.aiService.process(createAiDto, document, image);
+        }
+        catch (error) {
+            console.error('Error processing files:', error);
+            throw error;
+        }
     }
 };
 exports.AiController = AiController;
 __decorate([
     (0, common_1.Post)('chat'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileFieldsInterceptor)([
+        { name: 'document', maxCount: 1 },
+        { name: 'image', maxCount: 1 }
+    ], multer_config_1.multerConfig)),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.UploadedFiles)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_ai_dto_1.CreateAiDto]),
+    __metadata("design:paramtypes", [create_ai_dto_1.CreateAiDto, Object]),
     __metadata("design:returntype", Promise)
 ], AiController.prototype, "process", null);
 exports.AiController = AiController = __decorate([

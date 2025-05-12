@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSimulation = createSimulation;
+exports.createGraph = createGraph;
 const openai_1 = require("@langchain/openai");
-const chatBot_1 = require("./nodes/chatBot");
-const generateImage_1 = require("./nodes/generateImage");
+const docChat_1 = require("./nodes/docChat");
+const messages_1 = require("@langchain/core/messages");
 const dotenv_1 = require("dotenv");
 const langgraph_1 = require("@langchain/langgraph");
 (0, dotenv_1.config)();
@@ -20,6 +20,11 @@ function shouldContinue(state) {
         lastMessage.content.toLowerCase().includes('generate image')) {
         return 'image';
     }
+    const hasDocumentReference = messages.some(message => typeof message.content === 'string' &&
+        message.content.includes('Document uploaded:'));
+    if (hasDocumentReference && lastMessage instanceof messages_1.HumanMessage) {
+        return 'document';
+    }
     if (messages.length > 3) {
         return langgraph_1.END;
     }
@@ -30,18 +35,15 @@ function shouldContinue(state) {
         return 'continue';
     }
 }
-function createSimulation(botType) {
+function createGraph(botType) {
     const workflow = new langgraph_1.StateGraph(langgraph_1.MessagesAnnotation)
-        .addNode('chatbot', chatBot_1.chatBotNode)
-        .addNode('image', generateImage_1.imageGenNode)
-        .addConditionalEdges('chatbot', shouldContinue, {
+        .addNode('document', docChat_1.documentChatNode)
+        .addConditionalEdges('document', shouldContinue, {
         [langgraph_1.END]: langgraph_1.END,
-        continue: 'chatbot',
-        image: 'image'
+        document: 'document'
     })
-        .addEdge('image', 'chatbot')
-        .addEdge(langgraph_1.START, 'chatbot');
-    const simulation = workflow.compile();
-    return simulation;
+        .addEdge(langgraph_1.START, 'document');
+    const graph = workflow.compile();
+    return graph;
 }
 //# sourceMappingURL=graph.js.map

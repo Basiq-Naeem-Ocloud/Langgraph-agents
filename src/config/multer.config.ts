@@ -1,39 +1,32 @@
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+
+// Create necessary directories
+const createDirIfNotExists = (dir: string) => {
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+};
+
+// Create upload directories
+createDirIfNotExists('./uploads/documents');
+createDirIfNotExists('./uploads/images');
 
 export const multerConfig: MulterOptions = {
   storage: diskStorage({
-    destination: './uploads',
+    destination: (req, file, cb) => {
+      // Determine the destination based on file type
+      const isImage = file.mimetype.startsWith('image/');
+      const destination = isImage ? './uploads/images' : './uploads/documents';
+      cb(null, destination);
+    },
     filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-      cb(null, `${file.fieldname}-${uniqueSuffix}${extname(file.originalname)}`);
+      // Keep original filename
+      cb(null, file.originalname);
     },
   }),
-  fileFilter: (req, file, cb) => {
-    // Handle document files (PDF, CSV)
-    if (file.fieldname === 'document') {
-      const allowedMimeTypes = ['application/pdf', 'text/csv'];
-      if (allowedMimeTypes.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new Error('Invalid document file type. Only PDF and CSV files are allowed.'), false);
-      }
-    }
-    // Handle image files (PNG, JPG)
-    else if (file.fieldname === 'image') {
-      const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg'];
-      if (allowedMimeTypes.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new Error('Invalid image file type. Only PNG and JPG files are allowed.'), false);
-      }
-    }
-    // Reject other file types
-    else {
-      cb(new Error('Invalid field name. Only "document" and "image" fields are allowed.'), false);
-    }
-  },
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },

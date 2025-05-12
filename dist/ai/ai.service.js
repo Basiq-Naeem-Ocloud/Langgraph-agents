@@ -11,11 +11,19 @@ const common_1 = require("@nestjs/common");
 const graph_1 = require("./langgraph/graph");
 const messages_1 = require("@langchain/core/messages");
 let AiService = class AiService {
-    async process(createAiDto) {
+    async process(createAiDto, document, image) {
         console.log('inside ai service process function', createAiDto);
-        const simulation = (0, graph_1.createSimulation)();
+        console.log('document', document);
+        console.log('image', image);
+        const graph = (0, graph_1.createGraph)();
         const messages = createAiDto.message ? [new messages_1.HumanMessage(createAiDto.message)] : [];
-        const result = await simulation.invoke({ messages });
+        if (document) {
+            messages.push(new messages_1.HumanMessage(`Document uploaded: ${document.originalname}`));
+        }
+        if (image) {
+            messages.push(new messages_1.HumanMessage(`Image uploaded: ${image.originalname}`));
+        }
+        const result = await graph.invoke({ messages });
         console.log('result in service = ', result);
         return result;
     }

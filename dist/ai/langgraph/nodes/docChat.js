@@ -8,6 +8,9 @@ const path = require("path");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const text_1 = require("langchain/document_loaders/fs/text");
 const csv_1 = require("@langchain/community/document_loaders/fs/csv");
+const openai_2 = require("@langchain/openai");
+const memory_1 = require("langchain/vectorstores/memory");
+const text_splitter_1 = require("langchain/text_splitter");
 const llm = new openai_1.ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     model: "gpt-4o",
@@ -59,6 +62,7 @@ async function documentChat(messages) {
                 }
             ]);
         }
+        console.log('query = ', query);
         const documentPath = findDocumentPath(messages);
         console.log('documentPath = ', documentPath);
         if (!documentPath) {
@@ -77,27 +81,34 @@ async function documentChat(messages) {
         console.log(`Processing document: ${documentPath}`);
         const loader = getDocumentLoader(documentPath);
         const docs = await loader.load();
-        let documentContent = '';
-        for (const doc of docs) {
-            documentContent += doc.pageContent + '\n';
-        }
-        if (documentContent.length > 8000) {
-            documentContent = documentContent.substring(0, 8000) + '... (content truncated)';
-        }
-        console.log('\n documentContent = ', documentContent);
+        const textSplitter = new text_splitter_1.RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+        });
+        const splitDocs = await textSplitter.splitDocuments(docs);
+        const embeddings = new openai_2.OpenAIEmbeddings({
+            modelName: "text-embedding-3-small"
+        });
+        const vectorStore = await memory_1.MemoryVectorStore.fromDocuments(splitDocs, embeddings);
+        const relevantDocs = await vectorStore.similaritySearchWithScore(query, 4);
+        const relevantContent = relevantDocs
+            .filter(([_, score]) => score > 0.3)
+            .map(([doc, _]) => doc.pageContent)
+            .join('\n\n');
+        const finalContent = relevantContent || relevantDocs[0][0].pageContent;
         const systemMessage = {
             role: 'system',
-            content: `You are a document analysis assistant. You help users understand and extract information from their documents.`
+            content: 'You are a document analysis assistant. Please provide concise answers based only on the relevant document excerpts provided.'
         };
         const userMessage = {
             role: 'user',
-            content: `The following is content from a document:
+            content: `Relevant document excerpts:
 
-${documentContent}
+${finalContent}
 
-Based on this document content, please answer my question: ${query}
+Question: ${query}
 
-If the answer is not in the document content, please say so and provide general information if possible.`
+If the answer is not in these excerpts, please say so.`
         };
         console.log('systemMessage = ', systemMessage);
         console.log('userMessage = ', userMessage);

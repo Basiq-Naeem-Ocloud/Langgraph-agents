@@ -13,40 +13,48 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const dallE = new DallEAPIWrapper({
-    n: 1,
-    model: "dall-e-3",
+    modelName: "dall-e-3",
     apiKey: process.env.OPENAI_API_KEY,
+    quality: "standard",
     size: "1024x1024",
 });
 
 export async function generateImage(prompt: string): Promise<string> {
-    console.log('image key = ', process.env.OPENAI_API_KEY);
+    console.log('Generating image with prompt:', prompt);
     try {
         const imageURL = await dallE.invoke(prompt);
+        console.log('Image generated successfully:', imageURL);
         return imageURL;
     } catch (error) {
         console.error('Error generating image:', error);
-        throw error;
+        if (error.error?.message) {
+            throw new Error(`Failed to generate image: ${error.error.message}`);
+        } else {
+            throw new Error('Failed to generate image. Please try again with a different prompt.');
+        }
     }
 }
 
 export async function imageGenNode(state: typeof MessagesAnnotation.State) {
     const messages = state.messages;
-    console.log('messages = ', messages);
+    console.log('Processing image generation with messages:', messages);
     const lastMessage = messages[messages.length - 1];
 
     if (!lastMessage || typeof lastMessage.content !== 'string') {
         throw new Error('Invalid message format for image generation');
     }
 
-    const imageURL = await generateImage(lastMessage.content);
-
-    console.log('imageURL = ', imageURL);
-
-    // Create a response message with the image URL
-    const response = new AIMessageChunk({
-        content: `Here's your generated image: ${imageURL}`,
-    });
-
-    return { messages: [response] };
+    try {
+        const imageURL = await generateImage(lastMessage.content);
+        const response = new AIMessageChunk({
+            content: `Here's your generated image: ${imageURL}`,
+        });
+        return { messages: [...messages, response] };
+    } catch (error) {
+        console.error('Error in image generation node:', error);
+        const errorResponse = new AIMessageChunk({
+            content: error.message || 'Failed to generate image. Please try again with a different prompt.',
+        });
+        return { messages: [...messages, errorResponse] };
+    }
 }

@@ -193,6 +193,9 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { TextLoader } from "langchain/document_loaders/fs/text";
 // import { TextLoader } from "@langchain/community/document_loaders/fs/text";
 import { CSVLoader } from "@langchain/community/document_loaders/fs/csv";
+import { OpenAIEmbeddings } from "@langchain/openai";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 
 const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -233,11 +236,11 @@ export async function documentChat(
     messages: BaseMessageLike[]
 ): Promise<AIMessageChunk> {
     try {
-        // Find the actual query message (first message that's not a document upload message)
+        // Find the actual query message
         let query = '';
         for (const message of messages) {
-            if (message instanceof HumanMessage &&
-                typeof message.content === 'string' &&
+            if (message instanceof HumanMessage && 
+                typeof message.content === 'string' && 
                 !message.content.includes('Document uploaded:')) {
                 query = message.content;
                 break;
@@ -282,39 +285,56 @@ export async function documentChat(
         // Load the document
         console.log(`Processing document: ${documentPath}`);
         const loader = getDocumentLoader(documentPath);
-
         const docs = await loader.load();
 
-        // Extract text from documents
-        let documentContent = '';
-        for (const doc of docs) {
-            documentContent += doc.pageContent + '\n';
-        }
+        // Initialize text splitter
+        const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+        });
 
-        // Truncate document content if it's too long
-        if (documentContent.length > 8000) {
-            documentContent = documentContent.substring(0, 8000) + '... (content truncated)';
-        }
+        // Split documents into chunks
+        const splitDocs = await textSplitter.splitDocuments(docs);
 
-        console.log('\n documentContent = ', documentContent);
+        // Create embeddings
+        const embeddings = new OpenAIEmbeddings({
+            modelName: "text-embedding-3-small"
+        });
 
-        // Create messages for the model
+        // Create vector store
+        const vectorStore = await MemoryVectorStore.fromDocuments(
+            splitDocs,
+            embeddings
+        );
+
+        // Perform similarity search with scores
+        const relevantDocs = await vectorStore.similaritySearchWithScore(query, 4);
+        
+        // Get relevant content
+        const relevantContent = relevantDocs
+            .filter(([_, score]) => score > 0.3)
+            .map(([doc, _]) => doc.pageContent)
+            .join('\n\n');
+
+        // Use top result if no content passes threshold
+        const finalContent = relevantContent || relevantDocs[0][0].pageContent;
+
         const systemMessage = {
             role: 'system',
-            content: `You are a document analysis assistant. You help users understand and extract information from their documents.`
+            content: 'You are a document analysis assistant. Please provide concise answers based only on the relevant document excerpts provided.'
         };
 
         const userMessage = {
             role: 'user',
-            content: `The following is content from a document:
+            content: `Relevant document excerpts:
 
-${documentContent}
+${finalContent}
 
-Based on this document content, please answer my question: ${query}
+Question: ${query}
 
-If the answer is not in the document content, please say so and provide general information if possible.`
+If the answer is not in these excerpts, please say so.`
         };
-        // also if there is something in query that is not related to document please ignore it  // extended prompt
+
         // Get answer from the model
         console.log('systemMessage = ', systemMessage);
         console.log('userMessage = ', userMessage);

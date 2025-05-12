@@ -1,10 +1,9 @@
-import { BotType } from '../dto/create-ai.dto';
 import { BaseMessage } from '@langchain/core/messages';
-export declare function createGraph(botType?: BotType): import("@langchain/langgraph").CompiledStateGraph<import("@langchain/langgraph").StateType<{
+export declare function createGraph(): import("@langchain/langgraph").CompiledStateGraph<import("@langchain/langgraph").StateType<{
     messages: import("@langchain/langgraph").BinaryOperatorAggregate<BaseMessage[], import("@langchain/langgraph").Messages>;
 }>, import("@langchain/langgraph").UpdateType<{
     messages: import("@langchain/langgraph").BinaryOperatorAggregate<BaseMessage[], import("@langchain/langgraph").Messages>;
-}>, "document" | "__start__", {
+}>, "document" | "image" | "chatbot" | "__start__" | "router", {
     messages: import("@langchain/langgraph").BinaryOperatorAggregate<BaseMessage[], import("@langchain/langgraph").Messages>;
 }, {
     messages: import("@langchain/langgraph").BinaryOperatorAggregate<BaseMessage[], import("@langchain/langgraph").Messages>;

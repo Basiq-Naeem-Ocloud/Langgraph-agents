@@ -52,34 +52,91 @@ export async function documentChat(
     try {
         // Find the actual query message (the last human message that's not about document upload)
         let query = '';
-        const userMessages = messages
-            .filter(msg => msg instanceof HumanMessage)
-            .filter(msg => {
-                const content = msg.content;
-                // return !content.includes('Document uploaded:');
-                return typeof content === 'string' && !content.includes('Document uploaded:');
-            });
+        // const userMessages = messages
+        //     .filter(msg => msg instanceof HumanMessage)
+        //     .filter(msg => {
+        //         const content = msg.content;
+        //         // return !content.includes('Document uploaded:');
+        //         return typeof content === 'string' && !content.includes('Document uploaded:');
+        //     });
 
-        console.log('userMessages = ', userMessages);
-        if (userMessages.length > 0) {
-            const lastMessage = userMessages[userMessages.length - 1].content as string;
-            console.log('lastMessage = ', lastMessage);
+        const message = messages.filter(msg => msg instanceof HumanMessage);
 
-            // Split compound message and extract document-related query
-            const sentences = lastMessage.split(/[.!?]+\s*/);
-            query = sentences
-                .filter(sentence =>
-                    sentence.toLowerCase().includes('document') ||
-                    sentence.toLowerCase().includes('pdf') ||
-                    sentence.toLowerCase().includes('text') ||
-                    sentence.toLowerCase().includes('file'))
-                .join(' ');
+        const extractedTexts: string[] = [];
 
-            // If no document-specific part found, use the first sentence as fallback
-            if (!query && sentences.length > 0) {
-                query = sentences[0];
+        for (const msg of message) {
+            const content = msg.content;
+
+            // Case 1: simple string content
+            if (typeof content === 'string') {
+                if (!content.includes('Document uploaded:')) {
+                    extractedTexts.push(content);
+                }
+            }
+
+            // Case 2: multimodal array content
+            else if (Array.isArray(content)) {
+                const hasDocumentUpload = content.some(part =>
+                    part.type === 'text' && part.text.includes('Document uploaded:')
+                );
+
+                if (!hasDocumentUpload) {
+                    const combinedText = content
+                        .filter(part => part.type === 'text')
+                        .map(part => typeof part === 'object' && 'text' in part ? part.text : '')
+                        .join(' ')
+                        .trim();
+
+                    if (combinedText) {
+                        extractedTexts.push(combinedText);
+                    }
+                }
             }
         }
+
+        console.log('Extracted texts from human messages:', extractedTexts);
+
+
+        //  todo old  code below
+
+        // const userMessages = messages
+        //     .filter(msg => msg instanceof HumanMessage);
+        //
+        // console.log('userMessages = ', userMessages);
+        // let lastMessage;
+        // if (userMessages.length > 0) {
+        //     // const lastMessage = userMessages[userMessages.length - 1].content as string;
+        //     if (Array.isArray(userMessages[0].content)){
+        //         console.log('userMessages[0].content = ', userMessages[0].content);
+        //         lastMessage = userMessages[0].content[0];
+        //     }
+        //     else
+        //     {
+        //         lastMessage = userMessages[0].content as string;
+        //         console.log('lastMessage = ', lastMessage);
+        //     }
+        //
+        //     console.log('lastMessage = ', lastMessage);
+
+            // query  = lastMessage;
+
+
+        query = extractedTexts[0];
+            // Split compound message and extract document-related query
+            // const sentences = lastMessage.split(/[.!?]+\s*/);
+            // query = sentences
+            //     .filter(sentence =>
+            //         sentence.toLowerCase().includes('document') ||
+            //         sentence.toLowerCase().includes('pdf') ||
+            //         sentence.toLowerCase().includes('text') ||
+            //         sentence.toLowerCase().includes('file'))
+            //     .join(' ');
+
+            // If no document-specific part found, use the first sentence as fallback
+            // if (!query && sentences.length > 0) {
+            //     query = sentences[0];
+            // }
+        // }
 
         console.log('Extracted document query:', query);
 
@@ -118,19 +175,24 @@ export async function documentChat(
         const loader = getDocumentLoader(documentPath);
         const docs = await loader.load();
 
+        console.log('Loaded documents:', docs);
+
         // Initialize text splitter with smaller chunks for more precise matching
         const textSplitter = new RecursiveCharacterTextSplitter({
             chunkSize: 500,  // Smaller chunk size for more precise matching
             chunkOverlap: 100,  // Decent overlap to maintain context
         });
+        console.log('Splitting documents into chunks...', textSplitter);
 
         // Split documents into chunks
         const splitDocs = await textSplitter.splitDocuments(docs);
-
+        console.log('Split documents into chunks:', splitDocs);
         // Create embeddings
         const embeddings = new OpenAIEmbeddings({
-            modelName: "text-embedding-3-small"
+            model: "text-embedding-3-small"
         });
+
+
 
         // Create vector store
         const vectorStore = await MemoryVectorStore.fromDocuments(
@@ -138,10 +200,13 @@ export async function documentChat(
             embeddings
         );
 
+        console.log('Vector store created with embeddings');
+
         // Perform similarity search with scores
         // Increase the number of results and lower the score threshold for better coverage
         const relevantDocs = await vectorStore.similaritySearchWithScore(query, 5);
 
+        console.log('Relevant documents found:', relevantDocs);
         // Get relevant content with a lower threshold
         const relevantContent = relevantDocs
             .filter(([_, score]) => score > 0.2) // Lower threshold for better recall

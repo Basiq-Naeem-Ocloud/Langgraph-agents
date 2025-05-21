@@ -8,7 +8,6 @@ const llm = new openai_1.ChatOpenAI({
 });
 async function chatBotNode(state) {
     const messages = state.messages;
-    console.log('messages in chatbot node = ', messages);
     const chatBotResponse = await llm.invoke(messages);
     console.log('chatBotResponse = ', chatBotResponse);
     return { messages: [chatBotResponse] };

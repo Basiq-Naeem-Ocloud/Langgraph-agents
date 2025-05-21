@@ -19,6 +19,9 @@ function isTaskHandled(messages, taskType) {
 }
 async function routerNode(state) {
     console.log('Router received state:', state);
+    if (state.messages[state.messages.length - 1] instanceof messages_1.AIMessage) {
+        state.messages.push(new messages_1.HumanMessage("Which node should router visit next"));
+    }
     const systemPrompt = new messages_1.SystemMessage(`
        You are a routing agent. You must only return one of the following exact strings based on the user's latest message:
 
@@ -56,21 +59,22 @@ async function routerNode(state) {
         'document', 'image', 'chatbot', 'end'
         
       
-     NOTE: SIMPLY RETURN end when request is processed.
+     NOTE: SIMPLY RETURN end when request is processed. 
+     
+     RETURN EACH NODE NAME ONLY ONE TIME.
     `);
     console.log('state beforte calling llm: ', state.messages);
     const response = await routerLLM.invoke([systemPrompt, ...state.messages]);
     console.log('llm response on route= ', response);
-    let route = String(response.content);
-    console.log('rote : ', route);
-    if (route.includes(':')) {
-        route = route.split(':')[1].trim();
-    }
-    console.log('route after split: ', route);
+    let route = String(response.content).toLowerCase().trim();
+    console.log('raw route: ', route);
+    route = route.replace(/^['"]+|['"]+$/g, '');
     const validRoutes = ['chatbot', 'document', 'image', 'end'];
-    route = route.toLowerCase();
-    const matchedRoute = validRoutes.find(resultRoute => resultRoute.includes(route));
-    route = matchedRoute ?? 'end';
+    if (!validRoutes.includes(route)) {
+        console.log(`Invalid route returned: ${route}, defaulting to 'end'`);
+        route = 'end';
+    }
+    console.log('final route: ', route);
     const routingMessage = new messages_1.AIMessage(`ROUTE:${route}`);
     console.log('routingMessage: ', routingMessage);
     return {

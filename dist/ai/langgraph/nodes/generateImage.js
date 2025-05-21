@@ -34,31 +34,43 @@ async function generateImage(prompt) {
     }
 }
 async function imageGenNode(state) {
-    const messages = state.messages
-        .filter(msg => msg instanceof messages_1.HumanMessage)
-        .filter(msg => {
+    const messages = state.messages.filter(msg => msg instanceof messages_1.HumanMessage);
+    const extractedTexts = [];
+    for (const msg of messages) {
         const content = msg.content;
-        return typeof content === 'string';
-    });
-    console.log('Processing image generation with messages:', messages);
-    const lastMessage = messages[messages.length - 1];
-    console.log('lastMessage = ', lastMessage);
-    if (!lastMessage || typeof lastMessage.content !== 'string') {
-        throw new Error('Invalid message format for image generation');
+        if (typeof content === 'string') {
+            if (!content.includes('Document uploaded:')) {
+                extractedTexts.push(content);
+            }
+        }
+        else if (Array.isArray(content)) {
+            const hasDocumentUpload = content.some(part => part.type === 'text' && part.text.includes('Document uploaded:'));
+            if (!hasDocumentUpload) {
+                const combinedText = content
+                    .filter(part => part.type === 'text')
+                    .map(part => typeof part === 'object' && 'text' in part ? part.text : '')
+                    .join(' ')
+                    .trim();
+                if (combinedText) {
+                    extractedTexts.push(combinedText);
+                }
+            }
+        }
     }
+    console.log('Extracted texts from human messages:', extractedTexts);
     try {
-        const imageURL = await generateImage(lastMessage.content);
+        const imageURL = await generateImage(extractedTexts[0]);
         const response = new messages_2.AIMessage({
             content: `Here's your generated image: ${imageURL}`,
         });
-        return { messages: [...messages, response] };
+        return { messages: [...state.messages, response] };
     }
     catch (error) {
         console.error('Error in image generation node:', error);
         const errorResponse = new messages_2.AIMessage({
             content: error.message || 'Failed to generate image. Please try again with a different prompt.',
         });
-        return { messages: [...messages, errorResponse] };
+        return { messages: [...state.messages, errorResponse] };
     }
 }
 //# sourceMappingURL=generateImage.js.map

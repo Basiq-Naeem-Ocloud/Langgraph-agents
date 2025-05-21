@@ -38,32 +38,71 @@ export async function generateImage(prompt: string): Promise<string> {
 }
 
 export async function imageGenNode(state: typeof MessagesAnnotation.State) {
-    const messages = state.messages
-        .filter(msg => msg instanceof HumanMessage)
-        .filter(msg => {
-            const content = msg.content;
-            return typeof content === 'string';
-        });
-    console.log('Processing image generation with messages:', messages);
-    const lastMessage = messages[messages.length - 1];
 
 
-    console.log('lastMessage = ', lastMessage);
-    if (!lastMessage || typeof lastMessage.content !== 'string') {
-        throw new Error('Invalid message format for image generation');
+    const messages = state.messages.filter(msg => msg instanceof HumanMessage);
+
+    const extractedTexts: string[] = [];
+
+    for (const msg of messages) {
+        const content = msg.content;
+
+        // Case 1: simple string content
+        if (typeof content === 'string') {
+            if (!content.includes('Document uploaded:')) {
+                extractedTexts.push(content);
+            }
+        }
+
+        // Case 2: multimodal array content
+        else if (Array.isArray(content)) {
+            const hasDocumentUpload = content.some(part =>
+                part.type === 'text' && part.text.includes('Document uploaded:')
+            );
+
+            if (!hasDocumentUpload) {
+                const combinedText = content
+                    .filter(part => part.type === 'text')
+                    .map(part => typeof part === 'object' && 'text' in part ? part.text : '')
+                    .join(' ')
+                    .trim();
+
+                if (combinedText) {
+                    extractedTexts.push(combinedText);
+                }
+            }
+        }
     }
 
+    console.log('Extracted texts from human messages:', extractedTexts);
+
+    // todo old code
+    // const messages = state.messages
+    //     .filter(msg => msg instanceof HumanMessage)
+    //     .filter(msg => {
+    //         const content = msg.content;
+    //         return typeof content === 'string' && !content.includes('Document uploaded:');
+    //     });
+    // console.log('Processing image generation with messages:', messages);
+    // const lastMessage = messages[0];
+    //
+    //
+    // console.log('lastMessage = ', lastMessage);
+    // if (!lastMessage || typeof lastMessage.content !== 'string') {
+    //     throw new Error('Invalid message format for image generation');
+    // }
+
     try {
-        const imageURL = await generateImage(lastMessage.content);
+        const imageURL = await generateImage(extractedTexts[0]);
         const response = new AIMessage({
             content: `Here's your generated image: ${imageURL}`,
         });
-        return { messages: [...messages, response] };
+        return { messages: [...state.messages, response] };
     } catch (error) {
         console.error('Error in image generation node:', error);
         const errorResponse = new AIMessage({
             content: error.message || 'Failed to generate image. Please try again with a different prompt.',
         });
-        return { messages: [...messages, errorResponse] };
+        return { messages: [...state.messages, errorResponse] };
     }
 }

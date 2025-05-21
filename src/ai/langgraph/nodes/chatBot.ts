@@ -37,7 +37,20 @@ const llm = new ChatOpenAI({
 export async function chatBotNode (state: typeof MessagesAnnotation.State) {
     // console.log('process.env.OPENAI_API_KEY = ', process.env.OPENAI_API_KEY);
     const messages = state.messages
-    console.log('messages in chatbot node = ', messages);
+    // const userMessages = messages
+    //     .filter(msg => msg instanceof HumanMessage);
+    //
+    // console.log('USER messages in chatbot node = ', userMessages);
+    //
+    // let latestMessage;
+    // if(userMessages.length > 0) {
+    //     latestMessage = userMessages[0];
+    //     console.log('lastestMessage = ', latestMessage);
+    //     // if (!lastMessage || typeof lastMessage.content !== 'string') {
+    //     //     throw new Error('Invalid message format for chatbot');
+    //     // }
+    // }
+
     // const chatBotResponse = await chatBot(messages);
     const chatBotResponse = await llm.invoke(messages);
     console.log('chatBotResponse = ', chatBotResponse);

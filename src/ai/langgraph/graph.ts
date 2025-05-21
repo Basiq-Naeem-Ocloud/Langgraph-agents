@@ -309,6 +309,14 @@ function isTaskHandled(messages: BaseMessage[], taskType: string): boolean {
 async function routerNode(state: { messages: BaseMessage[] }) {
     console.log('Router received state:', state);
 
+
+    // todo appending human message.
+    if (state.messages[state.messages.length - 1] instanceof AIMessage) {
+        // include a human message to state
+        state.messages.push(new HumanMessage("Which node should router visit next"));
+        // state.messages.push(new HumanMessage({ content: 'Human: ' + state.messages[state.messages.length - 1].content }));
+    }
+
     // Get the actual query message, not the document upload notification
     // const lastHumanMessage = state.messages
     //     .filter(msg => {
@@ -433,7 +441,9 @@ async function routerNode(state: { messages: BaseMessage[] }) {
         'document', 'image', 'chatbot', 'end'
         
       
-     NOTE: SIMPLY RETURN end when request is processed.
+     NOTE: SIMPLY RETURN end when request is processed. 
+     
+     RETURN EACH NODE NAME ONLY ONE TIME.
     `);
 
     // choose on of the above based on the user’s *TEXTUAL* intent.  Do NOT process URLs or images.
@@ -472,31 +482,45 @@ async function routerNode(state: { messages: BaseMessage[] }) {
     const response = await routerLLM.invoke([systemPrompt,...state.messages]); // todo old way
 
     console.log('llm response on route= ', response);
+    let route = String(response.content).toLowerCase().trim();
+    console.log('raw route: ', route);
 
+// Clean up quotes and whitespace
+    route = route.replace(/^['"]+|['"]+$/g, ''); // remove wrapping quotes
 
-    let route = String(response.content);
-    console.log('rote : ', route);
+// Validate against known valid routes
+    const validRoutes = ['chatbot', 'document', 'image', 'end'];
 
-    if (route.includes(':')) {
-        route = route.split(':')[1].trim();
+    if (!validRoutes.includes(route)) {
+        console.log(`Invalid route returned: ${route}, defaulting to 'end'`);
+        route = 'end';
     }
 
-    console.log('route after split: ', route);
-// Optionally validate
-    const validRoutes = ['chatbot', 'document', 'image', 'end'];
-//     if (!validRoutes.includes(route)) {
-//         throw new Error(`Invalid route: ${route}`);
+    console.log('final route: ', route);
+
+//     let route = String(response.content);
+//     console.log('rote : ', route);
+//
+//     if (route.includes(':')) {
+//         route = route.split(':')[1].trim();
 //     }
-
-    // route = route as 'chatbot' | 'document' | 'image' | 'end';
-
-    route = route.toLowerCase();
-
-    // route = validRoutes.includes(route) ? route as typeof validRoutes[number] : 'end';
-    const matchedRoute = validRoutes.find(resultRoute => resultRoute.includes(route));
-
-// Use matched route or fallback to 'end'
-    route = matchedRoute ?? 'end';
+//
+//     console.log('route after split: ', route);
+// // Optionally validate
+//     const validRoutes = ['chatbot', 'document', 'image', 'end'];
+// //     if (!validRoutes.includes(route)) {
+// //         throw new Error(`Invalid route: ${route}`);
+// //     }
+//
+//     // route = route as 'chatbot' | 'document' | 'image' | 'end';
+//
+//     route = route.toLowerCase();
+//
+//     // route = validRoutes.includes(route) ? route as typeof validRoutes[number] : 'end';
+//     const matchedRoute = validRoutes.find(resultRoute => resultRoute.includes(route));
+//
+// // Use matched route or fallback to 'end'
+//     route = matchedRoute ?? 'end';
 
     // Add the routing decision as a system message
     const routingMessage = new AIMessage(`ROUTE:${route}`);

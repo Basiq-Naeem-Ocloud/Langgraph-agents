@@ -43,27 +43,31 @@ function findDocumentPath(messages) {
 async function documentChat(messages) {
     try {
         let query = '';
-        const userMessages = messages
-            .filter(msg => msg instanceof messages_1.HumanMessage)
-            .filter(msg => {
+        const message = messages.filter(msg => msg instanceof messages_1.HumanMessage);
+        const extractedTexts = [];
+        for (const msg of message) {
             const content = msg.content;
-            return typeof content === 'string' && !content.includes('Document uploaded:');
-        });
-        console.log('userMessages = ', userMessages);
-        if (userMessages.length > 0) {
-            const lastMessage = userMessages[userMessages.length - 1].content;
-            console.log('lastMessage = ', lastMessage);
-            const sentences = lastMessage.split(/[.!?]+\s*/);
-            query = sentences
-                .filter(sentence => sentence.toLowerCase().includes('document') ||
-                sentence.toLowerCase().includes('pdf') ||
-                sentence.toLowerCase().includes('text') ||
-                sentence.toLowerCase().includes('file'))
-                .join(' ');
-            if (!query && sentences.length > 0) {
-                query = sentences[0];
+            if (typeof content === 'string') {
+                if (!content.includes('Document uploaded:')) {
+                    extractedTexts.push(content);
+                }
+            }
+            else if (Array.isArray(content)) {
+                const hasDocumentUpload = content.some(part => part.type === 'text' && part.text.includes('Document uploaded:'));
+                if (!hasDocumentUpload) {
+                    const combinedText = content
+                        .filter(part => part.type === 'text')
+                        .map(part => typeof part === 'object' && 'text' in part ? part.text : '')
+                        .join(' ')
+                        .trim();
+                    if (combinedText) {
+                        extractedTexts.push(combinedText);
+                    }
+                }
             }
         }
+        console.log('Extracted texts from human messages:', extractedTexts);
+        query = extractedTexts[0];
         console.log('Extracted document query:', query);
         if (!query) {
             return await llm.invoke([
@@ -94,16 +98,21 @@ async function documentChat(messages) {
         console.log(`Processing document: ${documentPath}`);
         const loader = getDocumentLoader(documentPath);
         const docs = await loader.load();
+        console.log('Loaded documents:', docs);
         const textSplitter = new text_splitter_1.RecursiveCharacterTextSplitter({
             chunkSize: 500,
             chunkOverlap: 100,
         });
+        console.log('Splitting documents into chunks...', textSplitter);
         const splitDocs = await textSplitter.splitDocuments(docs);
+        console.log('Split documents into chunks:', splitDocs);
         const embeddings = new openai_2.OpenAIEmbeddings({
-            modelName: "text-embedding-3-small"
+            model: "text-embedding-3-small"
         });
         const vectorStore = await memory_1.MemoryVectorStore.fromDocuments(splitDocs, embeddings);
+        console.log('Vector store created with embeddings');
         const relevantDocs = await vectorStore.similaritySearchWithScore(query, 5);
+        console.log('Relevant documents found:', relevantDocs);
         const relevantContent = relevantDocs
             .filter(([_, score]) => score > 0.2)
             .map(([doc, score]) => {

@@ -13,30 +13,33 @@ const llm = new ChatOpenAI({
     model: "gpt-4o",
 });
 
-export async function chatBot(messages: BaseMessageLike[],
-     botType?: BotType
-    ): Promise<AIMessageChunk> {
-        botType = BotType.DOCTOR;
-    const systemMessage = {
-        role: 'system',
-        content: botType === BotType.DOCTOR
-            ? 'You are a medical doctor providing healthcare advice.'
-            : botType === BotType.FIANCE
-                ? 'You are a financial advisor providing financial guidance.'
-                : 'You are a helpful assistant.',
-    };
-
-    console.log('systemMessage = ', systemMessage);
-    const allMessages = [systemMessage, ...messages];
-
-    const response = await llm.invoke(allMessages)
-    return response
-}
+// export async function chatBot(messages: BaseMessageLike[],
+//      botType?: BotType
+//     ): Promise<AIMessageChunk> {
+//         // botType = BotType.DOCTOR;
+//     // const systemMessage = {
+//     //     role: 'system',
+//     //     // content: botType === BotType.DOCTOR
+//     //     //     ? 'You are a medical doctor providing healthcare advice.'
+//     //     //     : botType === BotType.FIANCE
+//     //     //         ? 'You are a financial advisor providing financial guidance.'
+//     //     //         : 'You are a helpful assistant.',
+//     //     content: 'You are a helpful assistant which helps users to answer their quries in a good manner.',
+//     // };
+//     //
+//     // console.log('systemMessage = ', systemMessage);
+//     const allMessages = [...messages];
+//
+//     const response = await llm.invoke(allMessages)
+//     return response
+// }
 
 export async function chatBotNode (state: typeof MessagesAnnotation.State) {
-    console.log('process.env.OPENAI_API_KEY = ', process.env.OPENAI_API_KEY);
+    // console.log('process.env.OPENAI_API_KEY = ', process.env.OPENAI_API_KEY);
     const messages = state.messages
-    const chatBotResponse = await chatBot(messages);
+    console.log('messages in chatbot node = ', messages);
+    // const chatBotResponse = await chatBot(messages);
+    const chatBotResponse = await llm.invoke(messages);
     console.log('chatBotResponse = ', chatBotResponse);
     return { messages: [chatBotResponse] }
 }

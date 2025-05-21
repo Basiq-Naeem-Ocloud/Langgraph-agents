@@ -5,6 +5,7 @@ exports.imageGenNode = imageGenNode;
 const openai_1 = require("@langchain/openai");
 const messages_1 = require("@langchain/core/messages");
 const dotenv_1 = require("dotenv");
+const messages_2 = require("@langchain/core/messages");
 (0, dotenv_1.config)();
 if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY environment variable is not set. Please add it to your .env file.');
@@ -33,22 +34,28 @@ async function generateImage(prompt) {
     }
 }
 async function imageGenNode(state) {
-    const messages = state.messages;
+    const messages = state.messages
+        .filter(msg => msg instanceof messages_1.HumanMessage)
+        .filter(msg => {
+        const content = msg.content;
+        return typeof content === 'string';
+    });
     console.log('Processing image generation with messages:', messages);
     const lastMessage = messages[messages.length - 1];
+    console.log('lastMessage = ', lastMessage);
     if (!lastMessage || typeof lastMessage.content !== 'string') {
         throw new Error('Invalid message format for image generation');
     }
     try {
         const imageURL = await generateImage(lastMessage.content);
-        const response = new messages_1.AIMessageChunk({
+        const response = new messages_2.AIMessage({
             content: `Here's your generated image: ${imageURL}`,
         });
         return { messages: [...messages, response] };
     }
     catch (error) {
         console.error('Error in image generation node:', error);
-        const errorResponse = new messages_1.AIMessageChunk({
+        const errorResponse = new messages_2.AIMessage({
             content: error.message || 'Failed to generate image. Please try again with a different prompt.',
         });
         return { messages: [...messages, errorResponse] };

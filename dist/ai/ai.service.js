@@ -11,18 +11,45 @@ const common_1 = require("@nestjs/common");
 const graph_1 = require("./langgraph/graph");
 const messages_1 = require("@langchain/core/messages");
 let AiService = class AiService {
+    validateImageUrl(url) {
+        if (url.startsWith('data:'))
+            return url;
+        if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i))
+            return url;
+        throw new Error("Invalid image URL. URL must end with .jpg, .jpeg, .png, .gif, or .webp");
+    }
     async process(createAiDto, document, image) {
         console.log('inside ai service process function', createAiDto);
         console.log('document', document);
         console.log('image', image);
         const graph = (0, graph_1.createGraph)();
-        const messages = createAiDto.message ? [new messages_1.HumanMessage(createAiDto.message)] : [];
+        const messages = [];
+        if (createAiDto.message && createAiDto.image2) {
+            messages.push(new messages_1.HumanMessage({
+                content: [
+                    {
+                        type: "text",
+                        text: createAiDto.message,
+                    },
+                    {
+                        type: "image_url",
+                        image_url: {
+                            url: this.validateImageUrl(createAiDto.image2),
+                        },
+                    },
+                ],
+            }));
+        }
+        else if (createAiDto.message) {
+            messages.push(new messages_1.HumanMessage(createAiDto.message));
+        }
         if (document) {
             messages.push(new messages_1.HumanMessage(`Document uploaded: ${document.originalname}`));
         }
         if (image) {
             messages.push(new messages_1.HumanMessage(`Image uploaded: ${image.originalname}`));
         }
+        console.log('complete messages = ', messages);
         const result = await graph.invoke({ messages });
         console.log('result in service = ', result);
         return result;

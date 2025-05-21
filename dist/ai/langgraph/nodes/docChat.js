@@ -4,6 +4,7 @@ exports.documentChat = documentChat;
 exports.documentChatNode = documentChatNode;
 const openai_1 = require("@langchain/openai");
 const messages_1 = require("@langchain/core/messages");
+const fs = require("fs");
 const path = require("path");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const text_1 = require("langchain/document_loaders/fs/text");
@@ -42,14 +43,28 @@ function findDocumentPath(messages) {
 async function documentChat(messages) {
     try {
         let query = '';
-        for (const message of messages) {
-            if (message instanceof messages_1.HumanMessage &&
-                typeof message.content === 'string' &&
-                !message.content.includes('Document uploaded:')) {
-                query = message.content;
-                break;
+        const userMessages = messages
+            .filter(msg => msg instanceof messages_1.HumanMessage)
+            .filter(msg => {
+            const content = msg.content;
+            return typeof content === 'string' && !content.includes('Document uploaded:');
+        });
+        console.log('userMessages = ', userMessages);
+        if (userMessages.length > 0) {
+            const lastMessage = userMessages[userMessages.length - 1].content;
+            console.log('lastMessage = ', lastMessage);
+            const sentences = lastMessage.split(/[.!?]+\s*/);
+            query = sentences
+                .filter(sentence => sentence.toLowerCase().includes('document') ||
+                sentence.toLowerCase().includes('pdf') ||
+                sentence.toLowerCase().includes('text') ||
+                sentence.toLowerCase().includes('file'))
+                .join(' ');
+            if (!query && sentences.length > 0) {
+                query = sentences[0];
             }
         }
+        console.log('Extracted document query:', query);
         if (!query) {
             return await llm.invoke([
                 {
@@ -58,15 +73,13 @@ async function documentChat(messages) {
                 },
                 {
                     role: 'user',
-                    content: 'No query was provided. Please ask a question about the document.'
+                    content: 'No document-related query was found. Please ask a specific question about the document.'
                 }
             ]);
         }
-        console.log('query = ', query);
         const documentPath = findDocumentPath(messages);
-        console.log('documentPath = ', documentPath);
-        if (!documentPath) {
-            console.log('inisde if of documentPath');
+        console.log('Document path:', documentPath);
+        if (!documentPath || !fs.existsSync(documentPath)) {
             return await llm.invoke([
                 {
                     role: 'system',
@@ -74,7 +87,7 @@ async function documentChat(messages) {
                 },
                 {
                     role: 'user',
-                    content: query
+                    content: 'No valid document was found. Please upload a document and try again.'
                 }
             ]);
         }
@@ -82,36 +95,42 @@ async function documentChat(messages) {
         const loader = getDocumentLoader(documentPath);
         const docs = await loader.load();
         const textSplitter = new text_splitter_1.RecursiveCharacterTextSplitter({
-            chunkSize: 1000,
-            chunkOverlap: 200,
+            chunkSize: 500,
+            chunkOverlap: 100,
         });
         const splitDocs = await textSplitter.splitDocuments(docs);
         const embeddings = new openai_2.OpenAIEmbeddings({
             modelName: "text-embedding-3-small"
         });
         const vectorStore = await memory_1.MemoryVectorStore.fromDocuments(splitDocs, embeddings);
-        const relevantDocs = await vectorStore.similaritySearchWithScore(query, 4);
+        const relevantDocs = await vectorStore.similaritySearchWithScore(query, 5);
         const relevantContent = relevantDocs
-            .filter(([_, score]) => score > 0.3)
-            .map(([doc, _]) => doc.pageContent)
+            .filter(([_, score]) => score > 0.2)
+            .map(([doc, score]) => {
+            console.log(`Content score: ${score} for chunk: ${doc.pageContent.substring(0, 100)}...`);
+            return doc.pageContent;
+        })
             .join('\n\n');
+        console.log('Found relevant content:', relevantContent.substring(0, 200) + '...');
         const finalContent = relevantContent || relevantDocs[0][0].pageContent;
         const systemMessage = {
             role: 'system',
-            content: 'You are a document analysis assistant. Please provide concise answers based only on the relevant document excerpts provided.'
+            content: `You are a document analysis assistant. Answer questions based ONLY on the provided document excerpts. 
+            If the answer cannot be found in the excerpts, say so clearly. 
+            Be precise and cite specific parts of the text when possible.
+            Focus only on answering the document-related query, ignore any other questions in the original message.`
         };
         const userMessage = {
             role: 'user',
-            content: `Relevant document excerpts:
+            content: `Here are the relevant document excerpts:
 
 ${finalContent}
 
-Question: ${query}
+Document-specific question: ${query}
 
-If the answer is not in these excerpts, please say so.`
+If you cannot find the specific answer in these excerpts, please say so clearly.`
         };
-        console.log('systemMessage = ', systemMessage);
-        console.log('userMessage = ', userMessage);
+        console.log('Sending query to LLM with relevant content');
         return await llm.invoke([systemMessage, userMessage]);
     }
     catch (error) {

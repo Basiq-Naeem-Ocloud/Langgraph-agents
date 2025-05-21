@@ -3,11 +3,13 @@ import { AIMessageChunk, BaseMessageLike, HumanMessage } from "@langchain/core/m
 import { MessagesAnnotation } from "@langchain/langgraph";
 // import * as process from "node:process";
 import { config } from 'dotenv';
+import { BaseMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+
 
 // Load environment variables
 config();
 
-// Verify API key is present
+// Verify API key is presentxw
 if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY environment variable is not set. Please add it to your .env file.');
 }
@@ -36,23 +38,30 @@ export async function generateImage(prompt: string): Promise<string> {
 }
 
 export async function imageGenNode(state: typeof MessagesAnnotation.State) {
-    const messages = state.messages;
+    const messages = state.messages
+        .filter(msg => msg instanceof HumanMessage)
+        .filter(msg => {
+            const content = msg.content;
+            return typeof content === 'string';
+        });
     console.log('Processing image generation with messages:', messages);
     const lastMessage = messages[messages.length - 1];
 
+
+    console.log('lastMessage = ', lastMessage);
     if (!lastMessage || typeof lastMessage.content !== 'string') {
         throw new Error('Invalid message format for image generation');
     }
 
     try {
         const imageURL = await generateImage(lastMessage.content);
-        const response = new AIMessageChunk({
+        const response = new AIMessage({
             content: `Here's your generated image: ${imageURL}`,
         });
         return { messages: [...messages, response] };
     } catch (error) {
         console.error('Error in image generation node:', error);
-        const errorResponse = new AIMessageChunk({
+        const errorResponse = new AIMessage({
             content: error.message || 'Failed to generate image. Please try again with a different prompt.',
         });
         return { messages: [...messages, errorResponse] };

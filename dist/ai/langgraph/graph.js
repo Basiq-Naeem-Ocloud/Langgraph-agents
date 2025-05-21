@@ -1,97 +1,142 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createGraph = createGraph;
+const langgraph_1 = require("@langchain/langgraph");
+const messages_1 = require("@langchain/core/messages");
 const openai_1 = require("@langchain/openai");
 const chatBot_1 = require("./nodes/chatBot");
 const generateImage_1 = require("./nodes/generateImage");
 const docChat_1 = require("./nodes/docChat");
-const langgraph_1 = require("@langchain/langgraph");
 const dotenv_1 = require("dotenv");
 (0, dotenv_1.config)();
-const VALID_NEXT_STATES = ['chatbot', 'image', 'document', 'end'];
-const model = new openai_1.ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    modelName: "gpt-4o",
-    temperature: 0,
+const routerLLM = new openai_1.ChatOpenAI({
+    model: "gpt-4o",
 });
-const routerNode = async (state) => {
+function isTaskHandled(messages, taskType) {
+    return messages.some(msg => msg instanceof messages_1.SystemMessage &&
+        typeof msg.content === 'string' &&
+        msg.content === `HANDLED:${taskType}`);
+}
+async function routerNode(state) {
     console.log('Router received state:', state);
+    const systemPrompt = new messages_1.SystemMessage(`
+       You are a routing agent. You must only return one of the following exact strings based on the user's latest message:
+
+        'document' — if the user asks about documents (PDFs, CSVs, text files) and wanted some information from a document.
+
+        'image' — if the user wants to generate or create an image.
+
+        'chatbot' — if the user wants a general conversation or provides an image URL for analysis.
+
+        'end' — if the request is handled or does not fit in any category.
+
+    Rules:
+
+        1-DO NOT respond with anything except one of the above strings.
+
+        2-DO NOT answer the user, describe, or explain anything.
+
+        3-If you are not certain, respond with 'end' only.
+
+        4-Do not infer new agent names or go beyond the 4 listed options.
+        
+    Simply return 'end' when job is done.
+    
+    IMPORTANT: DON'T PROCESS ANY URLS OR IMAGES. 
+    
+    REMEMBER: DO NOT GO IN LOOP BY RETURNING SAME NODE NAME AGAIN AND AGAIN JUST RETURN ONE NODE ONLY ONCE AND IF THE USER'S REQUEST IS SERVED.
+    
+    Return each node name only once.!!
+    
+    YOU ARE NOT ALLOWED TO ANSWER USER'S REQUEST JUST SIMPLY ANALYZE THE USER'S INTEND AND RETURN THE ONE OF TH APPROPRIATE NODE NAME.
+        
+    NOTE: IF YOU THINK USER IS ASKING FOR SOMETHING ELSE, THEN JUST RETURN 'end' WITHOUT ANY EXPLANATION.
+
+     DO NOT INCLUDE WORDS LIKE: "ROUTE" or "route" Return only one of the following exact words:
+        'document', 'image', 'chatbot', 'end'
+        
+      
+     NOTE: SIMPLY RETURN end when request is processed.
+    `);
+    console.log('state beforte calling llm: ', state.messages);
+    const response = await routerLLM.invoke([systemPrompt, ...state.messages]);
+    console.log('llm response on route= ', response);
+    let route = String(response.content);
+    console.log('rote : ', route);
+    if (route.includes(':')) {
+        route = route.split(':')[1].trim();
+    }
+    console.log('route after split: ', route);
+    const validRoutes = ['chatbot', 'document', 'image', 'end'];
+    route = route.toLowerCase();
+    const matchedRoute = validRoutes.find(resultRoute => resultRoute.includes(route));
+    route = matchedRoute ?? 'end';
+    const routingMessage = new messages_1.AIMessage(`ROUTE:${route}`);
+    console.log('routingMessage: ', routingMessage);
     return {
-        messages: state.messages
+        messages: [...state.messages, routingMessage]
     };
-};
-const documentWrapper = async (state) => {
-    console.log('Document node processing with state:', state);
-    const result = await (0, docChat_1.documentChatNode)(state);
-    return {
-        messages: result.messages
-    };
-};
-const chatbotWrapper = async (state) => {
-    console.log('Chatbot node processing with state:', state);
-    const result = await (0, chatBot_1.chatBotNode)(state);
-    return {
-        messages: result.messages
-    };
-};
-const imageWrapper = async (state) => {
-    console.log('Image node processing with state:', state);
-    const result = await (0, generateImage_1.imageGenNode)(state);
-    return {
-        messages: result.messages
-    };
-};
+}
+function markTaskHandled(messages, taskType) {
+    if (isTaskHandled(messages, taskType)) {
+        return messages;
+    }
+    return [...messages, new messages_1.SystemMessage(`HANDLED:${taskType}`)];
+}
+function extractRoute(message) {
+    if (!(message instanceof messages_1.SystemMessage))
+        return null;
+    const content = message.content;
+    if (typeof content !== 'string')
+        return null;
+    if (!content.startsWith('ROUTE:'))
+        return null;
+    return content.substring(6).replace(/['"]/g, '');
+}
 function createGraph() {
     const workflow = new langgraph_1.StateGraph(langgraph_1.MessagesAnnotation)
         .addNode('router', routerNode)
-        .addNode('document', documentWrapper)
-        .addNode('chatbot', chatbotWrapper)
-        .addNode('image', imageWrapper)
+        .addNode('document', async (state) => {
+        console.log('Document node processing with state:', state);
+        const result = await (0, docChat_1.documentChatNode)({ messages: state.messages });
+        return { messages: result.messages };
+    })
+        .addNode('chatbot', async (state) => {
+        console.log('Chatbot node processing with state:', state);
+        const result = await (0, chatBot_1.chatBotNode)({ messages: state.messages });
+        return { messages: result.messages };
+    })
+        .addNode('image', async (state) => {
+        console.log('Image node processing with state:', state);
+        const result = await (0, generateImage_1.imageGenNode)({ messages: state.messages });
+        return { messages: result.messages };
+    })
         .addEdge(langgraph_1.START, 'router')
         .addConditionalEdges('router', (state) => {
-        console.log('Router state in conditional edge:', state);
-        const hasDocumentUpload = state.messages.some(message => typeof message.content === 'string' &&
-            message.content.includes('Document uploaded:'));
-        if (hasDocumentUpload) {
-            console.log('Document detected, routing to document node');
-            return 'document';
+        const lastMessage = state.messages
+            .filter(msg => msg instanceof messages_1.AIMessage)
+            .map(msg => msg.content)
+            .filter((content) => typeof content === 'string')
+            .reverse()
+            .find(content => content.startsWith('ROUTE:'));
+        if (!lastMessage) {
+            console.warn('No routing message found, defaulting to chatbot');
+            return 'chatbot';
         }
-        const lastMessage = state.messages[state.messages.length - 1];
-        if (lastMessage && typeof lastMessage.content === 'string') {
-            const content = lastMessage.content.toLowerCase();
-            const imageKeywords = [
-                'generate image',
-                'create image',
-                'make image',
-                'draw',
-                'generate a picture',
-                'create a picture',
-                'generate an image',
-                'create an image',
-                'make a picture',
-                'generate picture',
-                'please generate',
-                'can you generate',
-                'could you generate',
-                'generate me'
-            ];
-            const isImageRequest = imageKeywords.some(keyword => content.includes(keyword));
-            if (isImageRequest) {
-                console.log('Image generation request detected, routing to image node');
-                return 'image';
-            }
-        }
-        console.log('No special request detected, routing to chatbot');
-        return 'chatbot';
+        const route = lastMessage.split(':')[1].replace(/['"]/g, '');
+        console.log('Route found:', route);
+        if (route === 'end')
+            return langgraph_1.END;
+        return route;
     }, {
         document: 'document',
         chatbot: 'chatbot',
-        image: 'image'
+        image: 'image',
+        [langgraph_1.END]: langgraph_1.END
     })
-        .addEdge('document', langgraph_1.END)
-        .addEdge('chatbot', langgraph_1.END)
-        .addEdge('image', langgraph_1.END);
-    console.log('Graph compiled with nodes:', workflow.nodes);
+        .addEdge('document', 'router')
+        .addEdge('image', 'router')
+        .addEdge('chatbot', 'router');
     return workflow.compile();
 }
 //# sourceMappingURL=graph.js.map

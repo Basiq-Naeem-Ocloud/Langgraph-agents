@@ -15,11 +15,17 @@ var BotType;
 (function (BotType) {
     BotType["DOCTOR"] = "doctor";
     BotType["FIANCE"] = "fiance";
+    BotType["DESIGNER"] = "designer";
+    BotType["WRITER"] = "writer";
+    BotType["LAWYER"] = "lawyer";
+    BotType["TECHNICIAN"] = "technician";
+    BotType["OTHER"] = "other";
 })(BotType || (exports.BotType = BotType = {}));
 class CreateAiDto {
     message;
     document;
     image;
+    image2;
     botType;
 }
 exports.CreateAiDto = CreateAiDto;
@@ -36,6 +42,11 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], CreateAiDto.prototype, "image", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateAiDto.prototype, "image2", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(BotType),

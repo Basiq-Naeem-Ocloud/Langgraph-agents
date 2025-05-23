@@ -4,9 +4,8 @@
 //
 
 import { ChatOpenAI } from '@langchain/openai'
-import { AIMessageChunk, BaseMessageLike, HumanMessage } from "@langchain/core/messages";
+import { AIMessageChunk, BaseMessageLike, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { MessagesAnnotation } from "@langchain/langgraph";
-import { BotType } from '../../dto/create-ai.dto';
 
 const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -34,27 +33,24 @@ const llm = new ChatOpenAI({
 //     return response
 // }
 
-export async function chatBotNode (state: typeof MessagesAnnotation.State) {
-    // console.log('process.env.OPENAI_API_KEY = ', process.env.OPENAI_API_KEY);
-    const messages = state.messages
-    // const userMessages = messages
-    //     .filter(msg => msg instanceof HumanMessage);
-    //
-    // console.log('USER messages in chatbot node = ', userMessages);
-    //
-    // let latestMessage;
-    // if(userMessages.length > 0) {
-    //     latestMessage = userMessages[0];
-    //     console.log('lastestMessage = ', latestMessage);
-    //     // if (!lastMessage || typeof lastMessage.content !== 'string') {
-    //     //     throw new Error('Invalid message format for chatbot');
-    //     // }
-    // }
+export async function chatBotNode(state: typeof MessagesAnnotation.State) {
+    // Get all messages from the state
+    const messages = state.messages;
 
-    // const chatBotResponse = await chatBot(messages);
-    const chatBotResponse = await llm.invoke(messages);
+    // Add a system message to help with conversation awareness
+    const conversationAwarePrompt = new SystemMessage(
+        "You are a helpful assistant with access to the full conversation history. " +
+        "When asked about previous messages or context, refer to the actual conversation history to provide accurate answers."
+    );
+
+    // Combine the conversation-aware prompt with all messages
+    const fullContext = [conversationAwarePrompt, ...messages];
+
+    // Generate response using full conversation context
+    const chatBotResponse = await llm.invoke(fullContext);
     console.log('chatBotResponse = ', chatBotResponse);
-    return { messages: [chatBotResponse] }
+    
+    return { messages: [...state.messages, chatBotResponse] };
 }
 // // Test the chat bot
 // const response = await chatBot([new HumanMessage('hi!')]);

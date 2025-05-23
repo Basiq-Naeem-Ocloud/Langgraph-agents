@@ -6,7 +6,8 @@ export declare class AiController {
     process(createAiDto: CreateAiDto, files: {
         document?: Express.Multer.File[];
         image?: Express.Multer.File[];
-    }): Promise<import("@langchain/langgraph").StateType<{
-        messages: import("@langchain/langgraph").BinaryOperatorAggregate<import("@langchain/core/messages").BaseMessage[], import("@langchain/langgraph").Messages>;
-    }>>;
+    }): Promise<{
+        sessionId: string;
+        messages: import("@langchain/core/messages").BaseMessage[];
+    }>;
 }

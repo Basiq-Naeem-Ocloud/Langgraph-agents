@@ -310,10 +310,16 @@ async function routerNode(state: { messages: BaseMessage[] }) {
     console.log('Router received state:', state);
 
 
-    // todo appending human message.
+    // todo old appending human message.
+    // if (state.messages[state.messages.length - 1] instanceof AIMessage) {
+    //     // include a human message to state
+    //     state.messages.push(new HumanMessage("Which node should router visit next"));
+    //     // state.messages.push(new HumanMessage({ content: 'Human: ' + state.messages[state.messages.length - 1].content }));
+    // }
+
     if (state.messages[state.messages.length - 1] instanceof AIMessage) {
         // include a human message to state
-        state.messages.push(new HumanMessage("Which node should router visit next"));
+        state.messages.push(new SystemMessage("Which node should router visit next"));
         // state.messages.push(new HumanMessage({ content: 'Human: ' + state.messages[state.messages.length - 1].content }));
     }
 
@@ -427,6 +433,10 @@ async function routerNode(state: { messages: BaseMessage[] }) {
         
     Simply return 'end' when job is done.
     
+    If user ask question regarding old chatHistory or user asked question about some previous response redirect the user to chatbot node.
+    
+    If user ask GENERIC Question route the user to chatbot node.
+    
     IMPORTANT: DON'T PROCESS ANY URLS OR IMAGES. 
     
     REMEMBER: DO NOT GO IN LOOP BY RETURNING SAME NODE NAME AGAIN AND AGAIN JUST RETURN ONE NODE ONLY ONCE AND IF THE USER'S REQUEST IS SERVED.
@@ -437,7 +447,9 @@ async function routerNode(state: { messages: BaseMessage[] }) {
         
     NOTE: IF YOU THINK USER IS ASKING FOR SOMETHING ELSE, THEN JUST RETURN 'end' WITHOUT ANY EXPLANATION.
 
-     DO NOT INCLUDE WORDS LIKE: "ROUTE" or "route" Return only one of the following exact words:
+     DO NOT INCLUDE WORDS LIKE: "ROUTE" or "route" in any case. 
+     
+     Return only one of the following exact words:
         'document', 'image', 'chatbot', 'end'
         
       
@@ -487,7 +499,13 @@ async function routerNode(state: { messages: BaseMessage[] }) {
 
 // Clean up quotes and whitespace
     route = route.replace(/^['"]+|['"]+$/g, ''); // remove wrapping quotes
+    if (route.includes(':')) {
+        console.log('colon exists , = ', route)
 
+        route = route.split(':')[1].trim();
+        console.log('after removing colon  = ', route)
+
+    }
 // Validate against known valid routes
     const validRoutes = ['chatbot', 'document', 'image', 'end'];
 
@@ -532,22 +550,22 @@ async function routerNode(state: { messages: BaseMessage[] }) {
 }
 
 // Helper function to mark tasks as handled
-function markTaskHandled(messages: BaseMessage[], taskType: string): BaseMessage[] {
-    // Check if this task type has already been handled
-    if (isTaskHandled(messages, taskType)) {
-        return messages;
-    }
-    return [...messages, new SystemMessage(`HANDLED:${taskType}`)];
-}
-
-// Helper function to extract route from message
-function extractRoute(message: BaseMessage): string | null {
-    if (!(message instanceof SystemMessage)) return null;
-    const content = message.content;
-    if (typeof content !== 'string') return null;
-    if (!content.startsWith('ROUTE:')) return null;
-    return content.substring(6).replace(/['"]/g, ''); // Remove any quotes from route
-}
+// function markTaskHandled(messages: BaseMessage[], taskType: string): BaseMessage[] {
+//     // Check if this task type has already been handled
+//     if (isTaskHandled(messages, taskType)) {
+//         return messages;
+//     }
+//     return [...messages, new SystemMessage(`HANDLED:${taskType}`)];
+// }
+//
+// // Helper function to extract route from message
+// function extractRoute(message: BaseMessage): string | null {
+//     if (!(message instanceof SystemMessage)) return null;
+//     const content = message.content;
+//     if (typeof content !== 'string') return null;
+//     if (!content.startsWith('ROUTE:')) return null;
+//     return content.substring(6).replace(/['"]/g, ''); // Remove any quotes from route
+// }
 
 export function createGraph() {
     const workflow = new StateGraph(MessagesAnnotation)

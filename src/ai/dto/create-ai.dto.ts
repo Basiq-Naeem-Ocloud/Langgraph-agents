@@ -1,15 +1,5 @@
-import { IsString, IsOptional, IsEnum } from "class-validator";
+import { IsString, IsOptional } from "class-validator";
 import { Express } from 'express';
-
-export enum BotType {
-    DOCTOR = 'doctor',
-    FIANCE = 'fiance',
-    DESIGNER = 'designer',
-    WRITER = 'writer',
-    LAWYER = 'lawyer',
-    TECHNICIAN = 'technician',
-    OTHER = 'other',
-}
 
 export class CreateAiDto {
     @IsString()
@@ -26,9 +16,9 @@ export class CreateAiDto {
     @IsOptional()
     image2?: string;
 
+    @IsString()
     @IsOptional()
-    @IsEnum(BotType)
-    botType?: BotType;
+    sessionId?: string;
 }
 
 

@@ -20,7 +20,7 @@ function isTaskHandled(messages, taskType) {
 async function routerNode(state) {
     console.log('Router received state:', state);
     if (state.messages[state.messages.length - 1] instanceof messages_1.AIMessage) {
-        state.messages.push(new messages_1.HumanMessage("Which node should router visit next"));
+        state.messages.push(new messages_1.SystemMessage("Which node should router visit next"));
     }
     const systemPrompt = new messages_1.SystemMessage(`
        You are a routing agent. You must only return one of the following exact strings based on the user's latest message:
@@ -45,6 +45,10 @@ async function routerNode(state) {
         
     Simply return 'end' when job is done.
     
+    If user ask question regarding old chatHistory or user asked question about some previous response redirect the user to chatbot node.
+    
+    If user ask GENERIC Question route the user to chatbot node.
+    
     IMPORTANT: DON'T PROCESS ANY URLS OR IMAGES. 
     
     REMEMBER: DO NOT GO IN LOOP BY RETURNING SAME NODE NAME AGAIN AND AGAIN JUST RETURN ONE NODE ONLY ONCE AND IF THE USER'S REQUEST IS SERVED.
@@ -55,7 +59,9 @@ async function routerNode(state) {
         
     NOTE: IF YOU THINK USER IS ASKING FOR SOMETHING ELSE, THEN JUST RETURN 'end' WITHOUT ANY EXPLANATION.
 
-     DO NOT INCLUDE WORDS LIKE: "ROUTE" or "route" Return only one of the following exact words:
+     DO NOT INCLUDE WORDS LIKE: "ROUTE" or "route" in any case. 
+     
+     Return only one of the following exact words:
         'document', 'image', 'chatbot', 'end'
         
       
@@ -69,6 +75,11 @@ async function routerNode(state) {
     let route = String(response.content).toLowerCase().trim();
     console.log('raw route: ', route);
     route = route.replace(/^['"]+|['"]+$/g, '');
+    if (route.includes(':')) {
+        console.log('colon exists , = ', route);
+        route = route.split(':')[1].trim();
+        console.log('after removing colon  = ', route);
+    }
     const validRoutes = ['chatbot', 'document', 'image', 'end'];
     if (!validRoutes.includes(route)) {
         console.log(`Invalid route returned: ${route}, defaulting to 'end'`);
@@ -80,22 +91,6 @@ async function routerNode(state) {
     return {
         messages: [...state.messages, routingMessage]
     };
-}
-function markTaskHandled(messages, taskType) {
-    if (isTaskHandled(messages, taskType)) {
-        return messages;
-    }
-    return [...messages, new messages_1.SystemMessage(`HANDLED:${taskType}`)];
-}
-function extractRoute(message) {
-    if (!(message instanceof messages_1.SystemMessage))
-        return null;
-    const content = message.content;
-    if (typeof content !== 'string')
-        return null;
-    if (!content.startsWith('ROUTE:'))
-        return null;
-    return content.substring(6).replace(/['"]/g, '');
 }
 function createGraph() {
     const workflow = new langgraph_1.StateGraph(langgraph_1.MessagesAnnotation)

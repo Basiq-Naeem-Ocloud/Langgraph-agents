@@ -10,13 +10,14 @@ exports.AiModule = void 0;
 const common_1 = require("@nestjs/common");
 const ai_service_1 = require("./ai.service");
 const ai_controller_1 = require("./ai.controller");
+const chat_history_service_1 = require("./services/chat-history.service");
 let AiModule = class AiModule {
 };
 exports.AiModule = AiModule;
 exports.AiModule = AiModule = __decorate([
     (0, common_1.Module)({
         controllers: [ai_controller_1.AiController],
-        providers: [ai_service_1.AiService,
+        providers: [ai_service_1.AiService, chat_history_service_1.ChatHistoryService,
         ],
     })
 ], AiModule);

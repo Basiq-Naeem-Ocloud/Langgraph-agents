@@ -9,24 +9,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateAiDto = exports.BotType = void 0;
+exports.CreateAiDto = void 0;
 const class_validator_1 = require("class-validator");
-var BotType;
-(function (BotType) {
-    BotType["DOCTOR"] = "doctor";
-    BotType["FIANCE"] = "fiance";
-    BotType["DESIGNER"] = "designer";
-    BotType["WRITER"] = "writer";
-    BotType["LAWYER"] = "lawyer";
-    BotType["TECHNICIAN"] = "technician";
-    BotType["OTHER"] = "other";
-})(BotType || (exports.BotType = BotType = {}));
 class CreateAiDto {
     message;
     document;
     image;
     image2;
-    botType;
+    sessionId;
 }
 exports.CreateAiDto = CreateAiDto;
 __decorate([
@@ -48,8 +38,8 @@ __decorate([
     __metadata("design:type", String)
 ], CreateAiDto.prototype, "image2", void 0);
 __decorate([
+    (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(BotType),
     __metadata("design:type", String)
-], CreateAiDto.prototype, "botType", void 0);
+], CreateAiDto.prototype, "sessionId", void 0);
 //# sourceMappingURL=create-ai.dto.js.map

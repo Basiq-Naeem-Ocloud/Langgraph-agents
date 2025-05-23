@@ -74,7 +74,7 @@ export async function imageGenNode(state: typeof MessagesAnnotation.State) {
         }
     }
 
-    console.log('Extracted texts from human messages:', extractedTexts);
+    console.log('Extracted texts from human messages:', extractedTexts[0]);
 
     // todo old code
     // const messages = state.messages
@@ -93,7 +93,7 @@ export async function imageGenNode(state: typeof MessagesAnnotation.State) {
     // }
 
     try {
-        const imageURL = await generateImage(extractedTexts[0]);
+        const imageURL = await generateImage(extractedTexts[extractedTexts.length - 1]);
         const response = new AIMessage({
             content: `Here's your generated image: ${imageURL}`,
         });

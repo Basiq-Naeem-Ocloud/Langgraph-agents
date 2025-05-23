@@ -9,6 +9,7 @@ const path = require("path");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const text_1 = require("langchain/document_loaders/fs/text");
 const csv_1 = require("@langchain/community/document_loaders/fs/csv");
+const docx_1 = require("@langchain/community/document_loaders/fs/docx");
 const openai_2 = require("@langchain/openai");
 const memory_1 = require("langchain/vectorstores/memory");
 const text_splitter_1 = require("langchain/text_splitter");
@@ -23,17 +24,19 @@ function getDocumentLoader(filePath) {
             return new pdf_1.PDFLoader(filePath);
         case '.csv':
             return new csv_1.CSVLoader(filePath);
+        case '.docx':
+            return new docx_1.DocxLoader(filePath);
         default:
             return new text_1.TextLoader(filePath);
     }
 }
 function findDocumentPath(messages) {
-    for (const message of messages) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
         if (message instanceof messages_1.HumanMessage && typeof message.content === 'string') {
             const match = message.content.match(/Document uploaded: (.*?)$/);
-            console.log('match = ', JSON.stringify(match));
             if (match && match[1]) {
-                const filename = match[1];
+                const filename = match[1].trim();
                 return path.join(process.cwd(), 'uploads', 'documents', filename);
             }
         }
@@ -67,32 +70,22 @@ async function documentChat(messages) {
             }
         }
         console.log('Extracted texts from human messages:', extractedTexts);
-        query = extractedTexts[0];
+        query = extractedTexts[extractedTexts.length - 1];
         console.log('Extracted document query:', query);
         if (!query) {
             return await llm.invoke([
-                {
-                    role: 'system',
-                    content: 'You are a helpful assistant.'
-                },
-                {
-                    role: 'user',
-                    content: 'No document-related query was found. Please ask a specific question about the document.'
-                }
+                new messages_1.SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+                ...messages,
+                new messages_1.HumanMessage('No document-related query was found. Please ask a specific question about the document.')
             ]);
         }
         const documentPath = findDocumentPath(messages);
         console.log('Document path:', documentPath);
         if (!documentPath || !fs.existsSync(documentPath)) {
             return await llm.invoke([
-                {
-                    role: 'system',
-                    content: 'You are a helpful assistant.'
-                },
-                {
-                    role: 'user',
-                    content: 'No valid document was found. Please upload a document and try again.'
-                }
+                new messages_1.SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+                ...messages,
+                new messages_1.HumanMessage('No valid document was found. Please upload a document and try again.')
             ]);
         }
         console.log(`Processing document: ${documentPath}`);
@@ -122,37 +115,20 @@ async function documentChat(messages) {
             .join('\n\n');
         console.log('Found relevant content:', relevantContent.substring(0, 200) + '...');
         const finalContent = relevantContent || relevantDocs[0][0].pageContent;
-        const systemMessage = {
-            role: 'system',
-            content: `You are a document analysis assistant. Answer questions based ONLY on the provided document excerpts. 
+        const systemMessage = new messages_1.SystemMessage(`You are a document analysis assistant with access to the full conversation history. 
+            Answer questions based ONLY on the provided document excerpts and conversation context. 
             If the answer cannot be found in the excerpts, say so clearly. 
             Be precise and cite specific parts of the text when possible.
-            Focus only on answering the document-related query, ignore any other questions in the original message.`
-        };
-        const userMessage = {
-            role: 'user',
-            content: `Here are the relevant document excerpts:
-
-${finalContent}
-
-Document-specific question: ${query}
-
-If you cannot find the specific answer in these excerpts, please say so clearly.`
-        };
-        console.log('Sending query to LLM with relevant content');
-        return await llm.invoke([systemMessage, userMessage]);
+            Focus only on answering the document-related query, but maintain awareness of the conversation context.`);
+        const userMessage = new messages_1.HumanMessage(`Here are the relevant document excerpts:\n\n${finalContent}\n\nDocument-specific question: ${query}\n\nIf you cannot find the specific answer in these excerpts, please say so clearly.`);
+        return await llm.invoke([systemMessage, ...messages, userMessage]);
     }
     catch (error) {
         console.error('Error in document chat:', error);
         return await llm.invoke([
-            {
-                role: 'system',
-                content: 'You are a helpful assistant.'
-            },
-            {
-                role: 'user',
-                content: 'There was an error processing your document. Please make sure the file is valid and try again.'
-            }
+            new messages_1.SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+            ...messages,
+            new messages_1.HumanMessage('There was an error processing your document. Please make sure the file is valid and try again.')
         ]);
     }
 }

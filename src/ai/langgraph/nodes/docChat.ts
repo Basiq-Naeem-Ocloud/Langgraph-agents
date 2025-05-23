@@ -1,5 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { AIMessageChunk, BaseMessageLike, HumanMessage } from "@langchain/core/messages";
+import { AIMessageChunk, BaseMessageLike, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { MessagesAnnotation } from "@langchain/langgraph";
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,6 +7,7 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { TextLoader } from "langchain/document_loaders/fs/text";
 // import { TextLoader } from "@langchain/community/document_loaders/fs/text";
 import { CSVLoader } from "@langchain/community/document_loaders/fs/csv";
+import { DocxLoader } from "@langchain/community/document_loaders/fs/docx";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
@@ -25,19 +26,38 @@ function getDocumentLoader(filePath: string) {
             return new PDFLoader(filePath);
         case '.csv':
             return new CSVLoader(filePath);
+        case '.docx':
+            return new DocxLoader(filePath);
         default:
             return new TextLoader(filePath);
     }
 }
 
 // Find document reference in messages
+//todo old working code
+
+// function findDocumentPath(messages: BaseMessageLike[]): string | null {
+//     for (const message of messages) {
+//         if (message instanceof HumanMessage && typeof message.content === 'string') {
+//             const match = message.content.match(/Document uploaded: (.*?)$/); // todo this is we are harcoding in grapgh file need to address this
+//             console.log('match = ', JSON.stringify(match));
+//             if (match && match[0]) {
+//                 const filename = match[0];
+//                 return path.join(process.cwd(), 'uploads', 'documents', filename);
+//             }
+//         }
+//     }
+//     return null;
+// }
+
 function findDocumentPath(messages: BaseMessageLike[]): string | null {
-    for (const message of messages) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+
         if (message instanceof HumanMessage && typeof message.content === 'string') {
-            const match = message.content.match(/Document uploaded: (.*?)$/); // todo this is we are harcoding in grapgh file need to address this
-            console.log('match = ', JSON.stringify(match));
+            const match = message.content.match(/Document uploaded: (.*?)$/);
             if (match && match[1]) {
-                const filename = match[1];
+                const filename = match[1].trim();
                 return path.join(process.cwd(), 'uploads', 'documents', filename);
             }
         }
@@ -121,7 +141,7 @@ export async function documentChat(
             // query  = lastMessage;
 
 
-        query = extractedTexts[0];
+        query = extractedTexts[extractedTexts.length - 1];
             // Split compound message and extract document-related query
             // const sentences = lastMessage.split(/[.!?]+\s*/);
             // query = sentences
@@ -142,14 +162,9 @@ export async function documentChat(
 
         if (!query) {
             return await llm.invoke([
-                {
-                    role: 'system',
-                    content: 'You are a helpful assistant.'
-                },
-                {
-                    role: 'user',
-                    content: 'No document-related query was found. Please ask a specific question about the document.'
-                }
+                new SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+                ...messages,
+                new HumanMessage('No document-related query was found. Please ask a specific question about the document.')
             ]);
         }
 
@@ -159,14 +174,9 @@ export async function documentChat(
 
         if (!documentPath || !fs.existsSync(documentPath)) {
             return await llm.invoke([
-                {
-                    role: 'system',
-                    content: 'You are a helpful assistant.'
-                },
-                {
-                    role: 'user',
-                    content: 'No valid document was found. Please upload a document and try again.'
-                }
+                new SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+                ...messages,
+                new HumanMessage('No valid document was found. Please upload a document and try again.')
             ]);
         }
 
@@ -195,7 +205,7 @@ export async function documentChat(
 
 
         // Create vector store
-        const vectorStore = await MemoryVectorStore.fromDocuments(
+        const vectorStore = await MemoryVectorStore.fromDocuments(  // todo here our vectore db will be implemented
             splitDocs,
             embeddings
         );
@@ -221,40 +231,26 @@ export async function documentChat(
         // If no relevant content found, use broader context
         const finalContent = relevantContent || relevantDocs[0][0].pageContent;
 
-        const systemMessage = {
-            role: 'system',
-            content: `You are a document analysis assistant. Answer questions based ONLY on the provided document excerpts. 
+        const systemMessage = new SystemMessage(
+            `You are a document analysis assistant with access to the full conversation history. 
+            Answer questions based ONLY on the provided document excerpts and conversation context. 
             If the answer cannot be found in the excerpts, say so clearly. 
             Be precise and cite specific parts of the text when possible.
-            Focus only on answering the document-related query, ignore any other questions in the original message.`
-        };
+            Focus only on answering the document-related query, but maintain awareness of the conversation context.`
+        );
 
-        const userMessage = {
-            role: 'user',
-            content: `Here are the relevant document excerpts:
+        const userMessage = new HumanMessage(
+            `Here are the relevant document excerpts:\n\n${finalContent}\n\nDocument-specific question: ${query}\n\nIf you cannot find the specific answer in these excerpts, please say so clearly.`
+        );
 
-${finalContent}
-
-Document-specific question: ${query}
-
-If you cannot find the specific answer in these excerpts, please say so clearly.`
-        };
-
-        // Get answer from the model
-        console.log('Sending query to LLM with relevant content');
-        return await llm.invoke([systemMessage, userMessage]);
+        return await llm.invoke([systemMessage, ...messages, userMessage]);
 
     } catch (error) {
         console.error('Error in document chat:', error);
         return await llm.invoke([
-            {
-                role: 'system',
-                content: 'You are a helpful assistant.'
-            },
-            {
-                role: 'user',
-                content: 'There was an error processing your document. Please make sure the file is valid and try again.'
-            }
+            new SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+            ...messages,
+            new HumanMessage('There was an error processing your document. Please make sure the file is valid and try again.')
         ]);
     }
 }

@@ -3,10 +3,14 @@ import { CreateAiDto } from './dto/create-ai.dto';
 import { createGraph } from './langgraph/graph';
 import { HumanMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatHistoryService } from './services/chat-history.service';
+import { ChromaService } from './services/chroma.service';
 
 @Injectable()
 export class AiService {
-  constructor(private chatHistoryService: ChatHistoryService) {}
+  constructor(
+    private chatHistoryService: ChatHistoryService,
+    private chromaService: ChromaService
+  ) {}
 
   private validateImageUrl(url: string): string {
     if (url.startsWith('data:')) return url;
@@ -59,9 +63,15 @@ export class AiService {
       messages.push(new HumanMessage(createAiDto.message));
     }
 
-    // If document is provided, add it to the message
+    // If document is provided, add it to ChromaDB and add a message
     if (document) {
-      messages.push(new HumanMessage(`Document uploaded: ${document.originalname}`));
+      try {
+        await this.chromaService.addDocument(`uploads/documents/${document.filename}`);
+        messages.push(new HumanMessage(`Document uploaded: ${document.originalname}`));
+      } catch (error) {
+        console.error('Error adding document to ChromaDB:', error);
+        messages.push(new SystemMessage(`Error processing document: ${error.message}`));
+      }
     }
 
     // If image is provided, add it to the message
@@ -69,11 +79,10 @@ export class AiService {
       messages.push(new HumanMessage(`Image uploaded: ${image.originalname}`));
     }
 
-    const result = await graph.invoke({ messages });
-    console.log('result in service = ', result);
+    const result = await graph.invoke({ messages }); //todo  old
 
     // Update chat history with new messages
-    this.chatHistoryService.addMessages(sessionId, result.messages);
+    this.chatHistoryService.addMessages(sessionId, result.messages); // todo old
 
     return {
       ...result,

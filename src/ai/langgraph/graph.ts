@@ -319,7 +319,7 @@ async function routerNode(state: { messages: BaseMessage[] }) {
 
     if (state.messages[state.messages.length - 1] instanceof AIMessage) {
         // include a human message to state
-        state.messages.push(new SystemMessage("Which node should router visit next"));
+        state.messages.push(new SystemMessage("Which node should router visit next?"));
         // state.messages.push(new HumanMessage({ content: 'Human: ' + state.messages[state.messages.length - 1].content }));
     }
 

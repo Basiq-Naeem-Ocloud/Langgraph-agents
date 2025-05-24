@@ -14,10 +14,13 @@ const common_1 = require("@nestjs/common");
 const graph_1 = require("./langgraph/graph");
 const messages_1 = require("@langchain/core/messages");
 const chat_history_service_1 = require("./services/chat-history.service");
+const chroma_service_1 = require("./services/chroma.service");
 let AiService = class AiService {
     chatHistoryService;
-    constructor(chatHistoryService) {
+    chromaService;
+    constructor(chatHistoryService, chromaService) {
         this.chatHistoryService = chatHistoryService;
+        this.chromaService = chromaService;
     }
     validateImageUrl(url) {
         if (url.startsWith('data:'))
@@ -60,13 +63,19 @@ let AiService = class AiService {
             messages.push(new messages_1.HumanMessage(createAiDto.message));
         }
         if (document) {
-            messages.push(new messages_1.HumanMessage(`Document uploaded: ${document.originalname}`));
+            try {
+                await this.chromaService.addDocument(`uploads/documents/${document.filename}`);
+                messages.push(new messages_1.HumanMessage(`Document uploaded: ${document.originalname}`));
+            }
+            catch (error) {
+                console.error('Error adding document to ChromaDB:', error);
+                messages.push(new messages_1.SystemMessage(`Error processing document: ${error.message}`));
+            }
         }
         if (image) {
             messages.push(new messages_1.HumanMessage(`Image uploaded: ${image.originalname}`));
         }
         const result = await graph.invoke({ messages });
-        console.log('result in service = ', result);
         this.chatHistoryService.addMessages(sessionId, result.messages);
         return {
             ...result,
@@ -77,6 +86,7 @@ let AiService = class AiService {
 exports.AiService = AiService;
 exports.AiService = AiService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [chat_history_service_1.ChatHistoryService])
+    __metadata("design:paramtypes", [chat_history_service_1.ChatHistoryService,
+        chroma_service_1.ChromaService])
 ], AiService);
 //# sourceMappingURL=ai.service.js.map

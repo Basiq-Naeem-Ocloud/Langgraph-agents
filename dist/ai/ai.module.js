@@ -11,14 +11,14 @@ const common_1 = require("@nestjs/common");
 const ai_service_1 = require("./ai.service");
 const ai_controller_1 = require("./ai.controller");
 const chat_history_service_1 = require("./services/chat-history.service");
+const chroma_service_1 = require("./services/chroma.service");
 let AiModule = class AiModule {
 };
 exports.AiModule = AiModule;
 exports.AiModule = AiModule = __decorate([
     (0, common_1.Module)({
         controllers: [ai_controller_1.AiController],
-        providers: [ai_service_1.AiService, chat_history_service_1.ChatHistoryService,
-        ],
+        providers: [ai_service_1.AiService, chat_history_service_1.ChatHistoryService, chroma_service_1.ChromaService],
     })
 ], AiModule);
 //# sourceMappingURL=ai.module.js.map

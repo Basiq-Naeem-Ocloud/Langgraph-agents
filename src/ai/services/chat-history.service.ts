@@ -24,4 +24,4 @@ export class ChatHistoryService {
     clearHistory(sessionId: string) {
         this.conversations.delete(sessionId);
     }
-} 
+}

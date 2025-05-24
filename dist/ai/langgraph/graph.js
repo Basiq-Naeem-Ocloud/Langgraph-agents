@@ -20,7 +20,7 @@ function isTaskHandled(messages, taskType) {
 async function routerNode(state) {
     console.log('Router received state:', state);
     if (state.messages[state.messages.length - 1] instanceof messages_1.AIMessage) {
-        state.messages.push(new messages_1.SystemMessage("Which node should router visit next"));
+        state.messages.push(new messages_1.SystemMessage("Which node should router visit next?"));
     }
     const systemPrompt = new messages_1.SystemMessage(`
        You are a routing agent. You must only return one of the following exact strings based on the user's latest message:

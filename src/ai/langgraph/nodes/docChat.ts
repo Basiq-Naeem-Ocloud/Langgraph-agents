@@ -11,6 +11,7 @@ import { DocxLoader } from "@langchain/community/document_loaders/fs/docx";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { ChromaService } from '../../services/chroma.service';
 
 const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -18,42 +19,25 @@ const llm = new ChatOpenAI({
 });
 
 // Function to get the document loader based on file type
-function getDocumentLoader(filePath: string) {
-    const extension = path.extname(filePath).toLowerCase();
-
-    switch (extension) {
-        case '.pdf':
-            return new PDFLoader(filePath);
-        case '.csv':
-            return new CSVLoader(filePath);
-        case '.docx':
-            return new DocxLoader(filePath);
-        default:
-            return new TextLoader(filePath);
-    }
-}
-
-// Find document reference in messages
-//todo old working code
-
-// function findDocumentPath(messages: BaseMessageLike[]): string | null {
-//     for (const message of messages) {
-//         if (message instanceof HumanMessage && typeof message.content === 'string') {
-//             const match = message.content.match(/Document uploaded: (.*?)$/); // todo this is we are harcoding in grapgh file need to address this
-//             console.log('match = ', JSON.stringify(match));
-//             if (match && match[0]) {
-//                 const filename = match[0];
-//                 return path.join(process.cwd(), 'uploads', 'documents', filename);
-//             }
-//         }
+// function getDocumentLoader(filePath: string) {
+//     const extension = path.extname(filePath).toLowerCase();
+//
+//     switch (extension) {
+//         case '.pdf':
+//             return new PDFLoader(filePath);
+//         case '.csv':
+//             return new CSVLoader(filePath);
+//         case '.docx':
+//             return new DocxLoader(filePath);
+//         default:
+//             return new TextLoader(filePath);
 //     }
-//     return null;
 // }
 
+// Find document reference in messages
 function findDocumentPath(messages: BaseMessageLike[]): string | null {
     for (let i = messages.length - 1; i >= 0; i--) {
         const message = messages[i];
-
         if (message instanceof HumanMessage && typeof message.content === 'string') {
             const match = message.content.match(/Document uploaded: (.*?)$/);
             if (match && match[1]) {
@@ -67,7 +51,8 @@ function findDocumentPath(messages: BaseMessageLike[]): string | null {
 
 // Process document and answer question
 export async function documentChat(
-    messages: BaseMessageLike[]
+    messages: BaseMessageLike[],
+    chromaService: ChromaService
 ): Promise<AIMessageChunk> {
     try {
         // Find the actual query message (the last human message that's not about document upload)
@@ -168,68 +153,30 @@ export async function documentChat(
             ]);
         }
 
-        // Find document path
-        const documentPath = findDocumentPath(messages);
-        console.log('Document path:', documentPath);
-
-        if (!documentPath || !fs.existsSync(documentPath)) {
-            return await llm.invoke([
-                new SystemMessage('You are a helpful assistant with access to the full conversation history.'),
-                ...messages,
-                new HumanMessage('No valid document was found. Please upload a document and try again.')
-            ]);
-        }
+        // Find document path and add to ChromaDB if not already added
+        // const documentPath = findDocumentPath(messages);
+        // console.log('Document path:', documentPath);
+        //
+        // if (!documentPath || !fs.existsSync(documentPath)) {
+        //     return await llm.invoke([
+        //         new SystemMessage('You are a helpful assistant with access to the full conversation history.'),
+        //         ...messages,
+        //         new HumanMessage('No valid document was found. Please upload a document and try again.')
+        //     ]);
+        // }
 
         // Load and process the document
-        console.log(`Processing document: ${documentPath}`);
-        const loader = getDocumentLoader(documentPath);
-        const docs = await loader.load();
+        // console.log(`Processing document: ${documentPath}`);
+        // const loader = getDocumentLoader(documentPath);
+        // const docs = await loader.load();
 
-        console.log('Loaded documents:', docs);
+        // Search for relevant content
+        const relevantDocs = await chromaService.similaritySearch(query);
+        console.log('Found relevant content from ChromaDB');
 
-        // Initialize text splitter with smaller chunks for more precise matching
-        const textSplitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 500,  // Smaller chunk size for more precise matching
-            chunkOverlap: 100,  // Decent overlap to maintain context
-        });
-        console.log('Splitting documents into chunks...', textSplitter);
+        const relevantContent = relevantDocs.map(doc => doc.pageContent).join('\n\n');
 
-        // Split documents into chunks
-        const splitDocs = await textSplitter.splitDocuments(docs);
-        console.log('Split documents into chunks:', splitDocs);
-        // Create embeddings
-        const embeddings = new OpenAIEmbeddings({
-            model: "text-embedding-3-small"
-        });
-
-
-
-        // Create vector store
-        const vectorStore = await MemoryVectorStore.fromDocuments(  // todo here our vectore db will be implemented
-            splitDocs,
-            embeddings
-        );
-
-        console.log('Vector store created with embeddings');
-
-        // Perform similarity search with scores
-        // Increase the number of results and lower the score threshold for better coverage
-        const relevantDocs = await vectorStore.similaritySearchWithScore(query, 5);
-
-        console.log('Relevant documents found:', relevantDocs);
-        // Get relevant content with a lower threshold
-        const relevantContent = relevantDocs
-            .filter(([_, score]) => score > 0.2) // Lower threshold for better recall
-            .map(([doc, score]) => {
-                console.log(`Content score: ${score} for chunk: ${doc.pageContent.substring(0, 100)}...`);
-                return doc.pageContent;
-            })
-            .join('\n\n');
-
-        console.log('Found relevant content:', relevantContent.substring(0, 200) + '...');
-
-        // If no relevant content found, use broader context
-        const finalContent = relevantContent || relevantDocs[0][0].pageContent;
+        console.log('relevantContent from chroma db = ', relevantContent);
 
         const systemMessage = new SystemMessage(
             `You are a document analysis assistant with access to the full conversation history. 
@@ -240,7 +187,7 @@ export async function documentChat(
         );
 
         const userMessage = new HumanMessage(
-            `Here are the relevant document excerpts:\n\n${finalContent}\n\nDocument-specific question: ${query}\n\nIf you cannot find the specific answer in these excerpts, please say so clearly.`
+            `Here are the relevant document excerpts:\n\n${relevantContent}\n\nDocument-specific question: ${query}\n\nIf you cannot find the specific answer in these excerpts, please say so clearly.`
         );
 
         return await llm.invoke([systemMessage, ...messages, userMessage]);
@@ -259,7 +206,8 @@ export async function documentChat(
 export async function documentChatNode(state: typeof MessagesAnnotation.State) {
     console.log('In document chat node state message = ', state.messages);
     const messages = state.messages;
-    const documentChatResponse = await documentChat(messages);
+    const chromaService = new ChromaService(); // Create a new instance
+    const documentChatResponse = await documentChat(messages, chromaService);
     console.log('documentChatResponse = ', documentChatResponse);
     return { messages: [...messages, documentChatResponse] };
 }

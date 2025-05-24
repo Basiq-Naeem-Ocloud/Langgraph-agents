@@ -86,7 +86,7 @@ async function routerNode(state) {
         route = 'end';
     }
     console.log('final route: ', route);
-    const routingMessage = new messages_1.AIMessage(`ROUTE:${route}`);
+    const routingMessage = new messages_1.SystemMessage(`ROUTE:${route}`);
     console.log('routingMessage: ', routingMessage);
     return {
         messages: [...state.messages, routingMessage]
@@ -96,24 +96,21 @@ function createGraph() {
     const workflow = new langgraph_1.StateGraph(langgraph_1.MessagesAnnotation)
         .addNode('router', routerNode)
         .addNode('document', async (state) => {
-        console.log('Document node processing with state:', state);
         const result = await (0, docChat_1.documentChatNode)({ messages: state.messages });
         return { messages: result.messages };
     })
         .addNode('chatbot', async (state) => {
-        console.log('Chatbot node processing with state:', state);
         const result = await (0, chatBot_1.chatBotNode)({ messages: state.messages });
         return { messages: result.messages };
     })
         .addNode('image', async (state) => {
-        console.log('Image node processing with state:', state);
         const result = await (0, generateImage_1.imageGenNode)({ messages: state.messages });
         return { messages: result.messages };
     })
         .addEdge(langgraph_1.START, 'router')
         .addConditionalEdges('router', (state) => {
         const lastMessage = state.messages
-            .filter(msg => msg instanceof messages_1.AIMessage)
+            .filter(msg => msg instanceof messages_1.SystemMessage)
             .map(msg => msg.content)
             .filter((content) => typeof content === 'string')
             .reverse()

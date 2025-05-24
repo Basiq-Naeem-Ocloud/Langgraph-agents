@@ -1,5 +1,4 @@
 import { CreateAiDto } from './dto/create-ai.dto';
-import { BaseMessage } from '@langchain/core/messages';
 import { ChatHistoryService } from './services/chat-history.service';
 import { ChromaService } from './services/chroma.service';
 export declare class AiService {
@@ -8,7 +7,10 @@ export declare class AiService {
     constructor(chatHistoryService: ChatHistoryService, chromaService: ChromaService);
     private validateImageUrl;
     process(createAiDto: CreateAiDto, document?: Express.Multer.File, image?: Express.Multer.File): Promise<{
+        messages: {
+            role: string;
+            content: string;
+        }[];
         sessionId: string;
-        messages: BaseMessage[];
     }>;
 }

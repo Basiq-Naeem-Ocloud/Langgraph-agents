@@ -75,10 +75,36 @@ let AiService = class AiService {
         if (image) {
             messages.push(new messages_1.HumanMessage(`Image uploaded: ${image.originalname}`));
         }
-        const result = await graph.invoke({ messages });
-        this.chatHistoryService.addMessages(sessionId, result.messages);
+        const config = {
+            configurable: {
+                thread_id: "stream_events",
+            },
+            version: "v2",
+        };
+        const stream = await graph.streamEvents({ messages }, config);
+        let lastMessage = '';
+        for await (const event of stream) {
+            if (event.event === 'on_chat_model_stream') {
+                console.dir({
+                    event: event.event,
+                    data: event.data.chunk.content,
+                }, { depth: 3 });
+                lastMessage += event.data.chunk.content || '';
+            }
+        }
+        if (lastMessage) {
+            const messagesToAdd = [];
+            if (createAiDto.message) {
+                messagesToAdd.push(new messages_1.HumanMessage(createAiDto.message));
+            }
+            messagesToAdd.push(new messages_1.AIMessage(lastMessage));
+            this.chatHistoryService.addMessages(sessionId, messagesToAdd);
+        }
         return {
-            ...result,
+            messages: [
+                ...(createAiDto.message ? [{ role: 'user', content: createAiDto.message }] : []),
+                { role: 'assistant', content: lastMessage }
+            ],
             sessionId
         };
     }

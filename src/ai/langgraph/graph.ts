@@ -541,7 +541,8 @@ async function routerNode(state: { messages: BaseMessage[] }) {
 //     route = matchedRoute ?? 'end';
 
     // Add the routing decision as a system message
-    const routingMessage = new AIMessage(`ROUTE:${route}`);
+    // const routingMessage = new AIMessage(`ROUTE:${route}`); // todo old system message
+    const routingMessage = new SystemMessage(`ROUTE:${route}`);
 
     console.log('routingMessage: ', routingMessage);
     return {
@@ -571,17 +572,17 @@ export function createGraph() {
     const workflow = new StateGraph(MessagesAnnotation)
         .addNode('router', routerNode)
         .addNode('document', async (state: { messages: BaseMessage[] }) => {
-            console.log('Document node processing with state:', state);
+            // console.log('Document node processing with state:', state);
             const result = await documentChatNode({ messages: state.messages });
             return { messages: result.messages };
         })
         .addNode('chatbot', async (state: { messages: BaseMessage[] }) => {
-            console.log('Chatbot node processing with state:', state);
+            // console.log('Chatbot node processing with state:', state);
             const result = await chatBotNode({ messages: state.messages });
             return { messages: result.messages };
         })
         .addNode('image', async (state: { messages: BaseMessage[] }) => {
-            console.log('Image node processing with state:', state);
+            // console.log('Image node processing with state:', state);
             const result = await imageGenNode({ messages: state.messages });
             return { messages: result.messages };
         })
@@ -590,7 +591,7 @@ export function createGraph() {
             'router',
             (state: { messages: BaseMessage[] }) => {
                 const lastMessage = state.messages
-                    .filter(msg => msg instanceof AIMessage)
+                    .filter(msg => msg instanceof SystemMessage)
                     .map(msg => msg.content)
                     .filter((content): content is string => typeof content === 'string')
                     .reverse()

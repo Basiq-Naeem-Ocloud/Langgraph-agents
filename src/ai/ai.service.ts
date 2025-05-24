@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CreateAiDto } from './dto/create-ai.dto';
 import { createGraph } from './langgraph/graph';
-import { HumanMessage, BaseMessage, SystemMessage } from '@langchain/core/messages';
+import { HumanMessage, BaseMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { ChatHistoryService } from './services/chat-history.service';
 import { ChromaService } from './services/chroma.service';
 
@@ -79,14 +79,69 @@ export class AiService {
       messages.push(new HumanMessage(`Image uploaded: ${image.originalname}`));
     }
 
-    const result = await graph.invoke({ messages }); //todo  old
 
-    // Update chat history with new messages
-    this.chatHistoryService.addMessages(sessionId, result.messages); // todo old
+    // todo message streaming start:
+    //   const config = {
+    //       configurable:{
+    //          thread_id:"stream_events",
+    //
+    //  },
+    //   };
+    //
+    // const stream = await graph.stream({messages}, config); // here is function name is stream only
+    // for await (const event of stream){
+    //     console.log("Event: ", event);
+    // }
+
+    // todo message streaming end
+
+    //todo  event streaming start
+
+
+    const config = {
+        configurable:{
+           thread_id:"stream_events",
+        },
+        version: "v2" as const,
+    };
+
+    const stream = await graph.streamEvents({messages}, config);
+    let lastMessage = '';
+
+    for await (const event of stream) {
+        if (event.event === 'on_chat_model_stream') {
+            console.dir({
+                event: event.event,
+                data: event.data.chunk.content,
+            }, { depth: 3 });
+            
+            // Accumulate the message content
+            lastMessage += event.data.chunk.content || '';
+        }
+    }
+
+    // After the stream is complete, add both user and AI messages to history
+    if (lastMessage) {
+        const messagesToAdd: BaseMessage[] = [];
+        
+        // Add user message if it exists
+        if (createAiDto.message) {
+            messagesToAdd.push(new HumanMessage(createAiDto.message));
+        }
+        
+        // Add AI response
+        messagesToAdd.push(new AIMessage(lastMessage));
+        
+        // Add both messages to chat history
+        this.chatHistoryService.addMessages(sessionId, messagesToAdd);
+    }
 
     return {
-      ...result,
-      sessionId // Return sessionId to client
+        messages: [
+            ...(createAiDto.message ? [{ role: 'user', content: createAiDto.message }] : []),
+            { role: 'assistant', content: lastMessage }
+        ],
+        sessionId
     };
   }
 

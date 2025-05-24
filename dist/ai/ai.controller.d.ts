@@ -7,7 +7,10 @@ export declare class AiController {
         document?: Express.Multer.File[];
         image?: Express.Multer.File[];
     }): Promise<{
+        messages: {
+            role: string;
+            content: string;
+        }[];
         sessionId: string;
-        messages: import("@langchain/core/messages").BaseMessage[];
     }>;
 }
